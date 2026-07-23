@@ -162,7 +162,7 @@ public class ScreenshotTool : ToolBase
             return true;
         }
 
-        if (!Path.IsPathFullyQualified(savePath))
+        if (!IsPathFullyQualified(savePath))
         {
             error = $"savePath must be an absolute local path: {savePath}";
             return false;
@@ -201,6 +201,33 @@ public class ScreenshotTool : ToolBase
         return true;
     }
 
+    // Mirrors .NET's Path.IsPathFullyQualified for Windows paths, which is unavailable on .NET Framework 4.8.
+    private static bool IsPathFullyQualified(string path)
+    {
+        if (path.Length < 2)
+        {
+            return false;
+        }
+
+        if (IsDirectorySeparator(path[0]))
+        {
+            // UNC (\\) or device (\\?\, \\.\) paths start with two separators (or \?).
+            return path[1] == '?' || IsDirectorySeparator(path[1]);
+        }
+
+        // Drive-rooted absolute path, e.g. "C:\...".
+        return path.Length >= 3
+            && path[1] == Path.VolumeSeparatorChar
+            && IsDirectorySeparator(path[2])
+            && IsValidDriveChar(path[0]);
+    }
+
+    private static bool IsDirectorySeparator(char c)
+        => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar;
+
+    private static bool IsValidDriveChar(char value)
+        => (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z');
+
     private static McpToolResult BuildScreenshotResult(byte[] imageData, string? savePath, bool overwrite)
     {
         if (string.IsNullOrEmpty(savePath))
@@ -220,7 +247,11 @@ public class ScreenshotTool : ToolBase
             try
             {
                 File.WriteAllBytes(tempPath, imageData);
-                File.Move(tempPath, savePath, overwrite);
+                if (overwrite && File.Exists(savePath))
+                {
+                    File.Delete(savePath);
+                }
+                File.Move(tempPath, savePath);
             }
             finally
             {

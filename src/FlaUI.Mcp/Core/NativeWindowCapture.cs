@@ -14,13 +14,13 @@ internal static class NativeWindowCapture
         imageData = Array.Empty<byte>();
         failureReason = null;
 
-        if (!window.Properties.NativeWindowHandle.TryGetValue(out var nativeWindowHandle) || nativeWindowHandle == 0)
+        if (!window.Properties.NativeWindowHandle.TryGetValue(out var nativeWindowHandle) || nativeWindowHandle == IntPtr.Zero)
         {
             failureReason = "No native window handle available";
             return false;
         }
 
-        var hwnd = new IntPtr(nativeWindowHandle);
+        var hwnd = nativeWindowHandle;
         if (!GetWindowRect(hwnd, out var rect))
         {
             failureReason = "Could not read window bounds";

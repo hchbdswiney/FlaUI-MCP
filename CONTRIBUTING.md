@@ -15,7 +15,8 @@ Thank you for your interest in contributing to FlaUI-MCP!
 
 ### Prerequisites
 - Windows 10/11
-- .NET 8.0 SDK
+- .NET SDK 8.0+ (used as the build tool)
+- .NET Framework 4.8 Developer Pack (targeting pack)
 - Visual Studio 2022 or VS Code
 
 ### Building
@@ -26,14 +27,17 @@ dotnet build
 ```
 
 The same build can be run from GitHub Actions with the **Build** workflow's
-manual dispatch button. Pull requests and pushes to `main` also run the build.
+manual dispatch button. Pull requests and pushes to `net48` also run the build.
 
 ### Releasing
 
-Releases are created by the **Release** workflow. Maintainers can either push a
-semantic version tag such as `v0.1.1`, or run the workflow manually and provide
-the tag name. Manual releases default to draft so the generated x64 and ARM64
-ZIP files can be reviewed before publishing.
+This is the **.NET Framework 4.8** release line, maintained on the long-lived
+`net48` branch (it is not merged back into `main`). Releases are created by the
+**Release** workflow. Maintainers can either push a `-net48` semantic version tag
+such as `v0.1.1-net48`, or run the workflow manually and provide the tag name.
+Manual releases default to draft so the generated `FlaUI-MCP-*-net48.zip` can be
+reviewed before publishing. Periodically sync `main` into `net48` (one-way) to
+absorb upstream fixes.
 
 ### Testing
 

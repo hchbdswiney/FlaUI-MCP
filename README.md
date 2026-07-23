@@ -50,21 +50,22 @@ Agent: Calculate 3 × 3
 ## Installation
 
 ### Prerequisites
-- Windows 10/11
-- .NET 8.0 Runtime
+- Windows 10 (1903+) / Windows 11
+- .NET Framework 4.8 (preinstalled on Windows 10 1903+ and Windows 11 - no download needed)
 
 ### Download Release
 
 Download the latest release from [Releases](https://github.com/shanselman/FlaUI-MCP/releases) and extract to a folder.
 
-Choose the ZIP that matches your machine:
-
 | Asset | Use when |
 |-------|----------|
-| `FlaUI-MCP-win-x64-*-self-contained.zip` | 64-bit Windows, no .NET runtime required |
-| `FlaUI-MCP-win-x64-*.zip` | 64-bit Windows with .NET 8 Runtime already installed |
-| `FlaUI-MCP-win-arm64-*-self-contained.zip` | Windows on ARM64, no .NET runtime required |
-| `FlaUI-MCP-win-arm64-*.zip` | Windows on ARM64 with .NET 8 Runtime already installed |
+| `FlaUI-MCP-*-net48.zip` | Any Windows 10 (1903+) / Windows 11 machine (x64 or ARM64) |
+
+This is the **.NET Framework 4.8** build. It exists as a separate, `-net48`-tagged
+release line for scenarios where FlaUI's native UI Automation calls (for example
+against Telerik/Infragistics controls) misbehave under the .NET Core runtime.
+Because .NET Framework 4.8 ships with Windows, no runtime download is required and
+the AnyCPU build runs on both x64 and ARM64.
 
 ### Configure MCP Client
 
@@ -249,7 +250,7 @@ dotnet test tests\FlaUI.Mcp.IntegrationTests
                               │ MCP Protocol (JSON-RPC over stdio)
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  FlaUI-MCP Server (.NET 8)                                      │
+│  FlaUI-MCP Server (.NET Framework 4.8)                          │
 │  - Implements MCP tool handlers                                 │
 │  - Builds agent-friendly accessibility snapshots                │
 │  - Maps element refs ↔ AutomationElements                       │

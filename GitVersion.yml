@@ -5,6 +5,11 @@ branches:
     mode: ContinuousDeployment
     tag: ''
     increment: Patch
+  net48:
+    regex: ^net48$
+    mode: ContinuousDeployment
+    tag: ''
+    increment: Patch
   feature:
     regex: ^features?[/-]
     mode: ContinuousDeployment

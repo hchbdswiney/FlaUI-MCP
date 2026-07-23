@@ -2,9 +2,9 @@ name: Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ net48 ]
   pull_request:
-    branches: [ main ]
+    branches: [ net48 ]
   workflow_dispatch:
 
 permissions:
@@ -13,10 +13,6 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    
-    strategy:
-      matrix:
-        runtime: [win-x64, win-arm64]
 
     steps:
     - uses: actions/checkout@v4
@@ -54,19 +50,15 @@ jobs:
           --no-restore `
           -p:Version=${{ steps.gitversion.outputs.semVer }}
 
-    - name: Publish
+    - name: Publish (net48, AnyCPU)
       run: |
         dotnet publish src/FlaUI.Mcp/FlaUI.Mcp.csproj `
           --configuration Release `
-          --runtime ${{ matrix.runtime }} `
-          --self-contained true `
-          --output ./publish/${{ matrix.runtime }} `
-          -p:Version=${{ steps.gitversion.outputs.semVer }} `
-          -p:PublishSingleFile=true `
-          -p:IncludeNativeLibrariesForSelfExtract=true
+          --output ./publish/net48 `
+          -p:Version=${{ steps.gitversion.outputs.semVer }}
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: FlaUI-MCP-${{ matrix.runtime }}
-        path: ./publish/${{ matrix.runtime }}/
+        name: FlaUI-MCP-net48
+        path: ./publish/net48/

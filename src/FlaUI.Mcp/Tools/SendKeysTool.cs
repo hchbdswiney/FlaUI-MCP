@@ -310,7 +310,8 @@ public class SendKeysTool : ToolBase
         }
 
         return input
-            .Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Trim())
             .Where(part => !string.IsNullOrWhiteSpace(part));
     }
 }

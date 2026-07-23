@@ -159,7 +159,7 @@ public class TestAppFixture : IAsyncLifetime
             {
                 var refStart = line.IndexOf("[ref=") + 5;
                 var refEnd = line.IndexOf("]", refStart);
-                return line[refStart..refEnd];
+                return line.Substring(refStart, refEnd - refStart);
             }
         }
         return null;

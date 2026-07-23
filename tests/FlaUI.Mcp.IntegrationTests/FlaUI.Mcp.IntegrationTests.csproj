@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
@@ -18,8 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FlaUI.Mcp\FlaUI.Mcp.csproj" />
-    <ProjectReference Include="..\TestApps\WinFormsTestApp\WinFormsTestApp.csproj" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="..\TestApps\WpfTestApp\WpfTestApp.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\TestApps\WinFormsTestApp\WinFormsTestApp.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\TestApps\WpfTestApp\WpfTestApp.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
   <ItemGroup>

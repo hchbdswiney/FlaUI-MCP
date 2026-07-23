@@ -26,7 +26,9 @@ public class McpServer
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            var line = await reader.ReadLineAsync(cancellationToken);
+            // .NET Framework's StreamReader has no CancellationToken overload for ReadLineAsync.
+            // Shutdown is driven by stdin reaching EOF (ReadLineAsync returns null) or process exit.
+            var line = await reader.ReadLineAsync();
             if (line == null) break;
             if (string.IsNullOrWhiteSpace(line)) continue;
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Retargeted the MCP server (and test projects) from `net8.0-windows` to `.NET Framework 4.8`.
+  This is maintained as a separate, `-net48`-tagged release line off the `net48` branch to
+  work around FlaUI native UI Automation calls (for example against Telerik/Infragistics
+  controls) misbehaving under the .NET Core runtime. Releases ship a single AnyCPU
+  `FlaUI-MCP-*-net48.zip`; because .NET Framework 4.8 ships with Windows, no runtime
+  download is required and the build runs on both x64 and ARM64.
+
 ## [0.2.0] - 2026-07-08
 
 ### Fixed

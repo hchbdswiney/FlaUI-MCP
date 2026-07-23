@@ -47,8 +47,8 @@ public class DpiCaptureTests : IDisposable
     {
         var proc = Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true })!;
         _process = proc;
-        var deadline = Environment.TickCount64 + timeoutMs;
-        while (Environment.TickCount64 < deadline)
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
         {
             Thread.Sleep(500);
             proc.Refresh();

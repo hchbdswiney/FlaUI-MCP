@@ -105,7 +105,7 @@ public class SnapshotTests
                 break;
         }
 
-        _output.WriteLine(snapshot2[..Math.Min(2000, snapshot2.Length)]);
+        _output.WriteLine(snapshot2.Substring(0, Math.Min(2000, snapshot2.Length)));
         Assert.Contains("Test Data", snapshot2);
     }
 }
