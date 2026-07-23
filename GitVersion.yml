@@ -10,6 +10,8 @@ branches:
     mode: ContinuousDeployment
     tag: ''
     increment: Patch
+    source-branches: [ main ]
+    is-mainline: true
   feature:
     regex: ^features?[/-]
     mode: ContinuousDeployment
