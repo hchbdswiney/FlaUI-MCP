@@ -67,7 +67,7 @@ public record McpServerInfo
     public string Name { get; init; } = "playwright-windows";
     
     [JsonPropertyName("version")]
-    public string Version { get; init; } = "0.1.0";
+    public string Version { get; init; } = "0.3.0";
 }
 
 public record McpCapabilities

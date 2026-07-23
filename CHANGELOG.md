@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-net48] - 2026-07-23
+
 ### Changed
 - Retargeted the MCP server (and test projects) from `net8.0-windows` to `.NET Framework 4.8`.
   This is maintained as a separate, `-net48`-tagged release line off the `net48` branch to
