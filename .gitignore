@@ -24,6 +24,10 @@ build/
 [Bb]in/
 [Oo]bj/
 
+# Local publish output and packaged release archives
+publish/
+FlaUI-MCP-*.zip
+
 # NuGet
 packages/
 *.nuget.props
