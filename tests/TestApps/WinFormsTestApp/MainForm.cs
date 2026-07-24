@@ -28,8 +28,8 @@ namespace WinFormsTestApp
             _tabs.TabPages.Add(CreateGridTab());
             _tabs.TabPages.Add(CreateTreeTab());
             _tabs.TabPages.Add(CreateDialogTab());
+            _tabs.TabPages.Add(CreateStressTab());
         }
-
         /// <summary>
         /// Tab 1: Buttons with various states and patterns.
         /// Tests: windows_click (invoke/mouse/toggle), windows_find (by role/state),
@@ -488,6 +488,81 @@ namespace WinFormsTestApp
             };
             layout.Controls.Add(new Label { Text = "", AutoSize = true }); // spacer
             layout.Controls.Add(statusLabel);
+
+            return tab;
+        }
+
+        /// <summary>
+        /// Tab 6: Deliberately heavy UI for exercising bounded/shallow snapshots.
+        /// Contains a very large grid (many rows) and a deeply nested panel chain
+        /// with a marker control at the bottom. A full-depth snapshot here is slow;
+        /// shallow snapshots (maxDepth/maxChildren/maxElements) must stay fast.
+        /// Tests: windows_snapshot (maxDepth, maxChildren, maxElements) on large trees.
+        /// </summary>
+        private TabPage CreateStressTab()
+        {
+            var tab = new TabPage("Stress") { Name = "StressTab" };
+            var split = new SplitContainer
+            {
+                Dock = DockStyle.Fill,
+                Orientation = Orientation.Vertical,
+                SplitterDistance = 400
+            };
+            tab.Controls.Add(split);
+
+            // Left: a very large grid to stress children/element limiting.
+            var grid = new DataGridView
+            {
+                Name = "StressDataGrid",
+                Dock = DockStyle.Fill,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                AllowUserToAddRows = false,
+                ReadOnly = true,
+                RowHeadersVisible = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect
+            };
+            grid.AccessibleName = "Stress Data";
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "ID", HeaderText = "ID" });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "Name" });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Value", HeaderText = "Value" });
+
+            var rng = new Random(1234); // deterministic
+            for (int i = 0; i < 1000; i++)
+            {
+                grid.Rows.Add($"STRESS-{i + 1:D4}", $"Stress Row {i + 1}", $"{rng.Next(1, 100000)}");
+            }
+            split.Panel1.Controls.Add(grid);
+
+            // Right: a deeply nested panel chain to stress depth limiting.
+            // The innermost panel holds a marker label only reachable at deep depth.
+            var host = new Panel { Dock = DockStyle.Fill, Name = "DeepNestHost", AutoScroll = true };
+            split.Panel2.Controls.Add(host);
+
+            Control parent = host;
+            const int nestingDepth = 25;
+            for (int level = 1; level <= nestingDepth; level++)
+            {
+                var panel = new Panel
+                {
+                    Name = $"NestLevel{level}",
+                    Dock = DockStyle.Fill,
+                    Padding = new Padding(2),
+                    BorderStyle = BorderStyle.FixedSingle
+                };
+                panel.AccessibleName = $"Nest Level {level}";
+                parent.Controls.Add(panel);
+                parent = panel;
+            }
+
+            var deepMarker = new Label
+            {
+                Text = "Deep Nested Marker",
+                Name = "DeepNestedMarker",
+                AutoSize = true,
+                Dock = DockStyle.Top
+            };
+            deepMarker.AccessibleName = "Deep Nested Marker";
+            parent.Controls.Add(deepMarker);
 
             return tab;
         }

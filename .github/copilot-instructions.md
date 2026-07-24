@@ -70,6 +70,19 @@ Launch a Windows application and return a session ID.
 
 Like Playwright's `browser_snapshot`, this gives structured semantic data, not pixels.
 
+For large grids or deep modal windows that would otherwise time out, take a **shallow snapshot** using optional bounds, then re-snapshot a specific element for detail:
+
+```json
+{ "maxDepth": 3 }                         // Only descend 3 levels
+{ "maxChildren": 25 }                     // Cap children per node (big grids/lists)
+{ "maxElements": 500 }                    // Hard cap on total elements emitted
+{ "maxDepth": 2, "maxChildren": 20, "maxElements": 300 }  // Combined, fast
+```
+
+Truncated output includes markers like `... (N more children not shown; increase maxChildren)`
+and `... snapshot truncated by limits (...)`. Hidden elements are not assigned refs until a
+deeper/targeted snapshot is taken.
+
 ### `windows_click`
 Click an element by ref.
 ```json
@@ -279,7 +292,7 @@ await app.close();
 - MCP server runs as stdio JSON-RPC (standard MCP transport)
 - Element refs are session-scoped (w1e5 is only valid for window w1)
 - Refs remain stable across snapshots unless the element is removed from DOM
-- Snapshot depth is configurable (default: 10 levels) to avoid huge trees
+- Snapshot depth is configurable (default: 10 levels) to avoid huge trees. Per-call `maxDepth`, `maxChildren`, and `maxElements` bounds produce shallow snapshots for large grids / deep modal trees.
 - Auto-retry on stale element refs (element may have been recreated)
 - Timeouts default to 30s for element waits, configurable per-call
 

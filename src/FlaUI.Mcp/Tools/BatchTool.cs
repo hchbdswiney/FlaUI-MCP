@@ -72,6 +72,21 @@ public class BatchTool : ToolBase
                         {
                             type = "string",
                             description = "Window handle for snapshot action"
+                        },
+                        maxDepth = new
+                        {
+                            type = "integer",
+                            description = "Snapshot action: maximum tree depth to descend (shallow snapshot). Default 10."
+                        },
+                        maxChildren = new
+                        {
+                            type = "integer",
+                            description = "Snapshot action: maximum children shown per node before truncating. Default: unlimited."
+                        },
+                        maxElements = new
+                        {
+                            type = "integer",
+                            description = "Snapshot action: maximum total elements before stopping. Default: unlimited."
                         }
                     },
                     required = new[] { "action" }
@@ -268,7 +283,25 @@ public class BatchTool : ToolBase
             return "No window found";
         }
 
-        var snapshot = _snapshotBuilder.BuildSnapshot(handle!, window);
+        var options = new SnapshotOptions
+        {
+            MaxDepth = GetActionInt(action, "maxDepth") ?? 10,
+            MaxChildrenPerNode = GetActionInt(action, "maxChildren"),
+            MaxElements = GetActionInt(action, "maxElements")
+        };
+
+        var snapshot = _snapshotBuilder.BuildSnapshot(handle!, window, options);
         return $"\n{snapshot}";
+    }
+
+    private static int? GetActionInt(JsonElement action, string name)
+    {
+        if (!action.TryGetProperty(name, out var prop)) return null;
+        return prop.ValueKind switch
+        {
+            JsonValueKind.Number when prop.TryGetInt32(out var value) => value,
+            JsonValueKind.String when int.TryParse(prop.GetString(), out var value) => value,
+            _ => null
+        };
     }
 }

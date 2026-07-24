@@ -164,4 +164,20 @@ public abstract class ToolBase : ITool
         if (!arguments.Value.TryGetProperty(name, out var prop)) return defaultValue;
         return prop.GetBoolean();
     }
+
+    protected int? GetIntArgument(JsonElement? arguments, string name)
+    {
+        if (arguments == null) return null;
+        if (!arguments.Value.TryGetProperty(name, out var prop)) return null;
+
+        return prop.ValueKind switch
+        {
+            JsonValueKind.Number when prop.TryGetInt32(out var value) => value,
+            JsonValueKind.String when int.TryParse(prop.GetString(), out var value) => value,
+            _ => null
+        };
+    }
+
+    protected int GetIntArgument(JsonElement? arguments, string name, int defaultValue)
+        => GetIntArgument(arguments, name) ?? defaultValue;
 }

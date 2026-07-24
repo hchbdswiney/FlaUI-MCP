@@ -137,6 +137,44 @@ public class TestAppFixture : IAsyncLifetime
     }
 
     /// <summary>
+    /// Take a bounded snapshot of a window using the given options.
+    /// </summary>
+    public string TakeSnapshot(string handle, SnapshotOptions options)
+    {
+        var builder = new SnapshotBuilder(Elements);
+        var window = Session.GetWindow(handle)!;
+        return builder.BuildSnapshot(handle, window, options);
+    }
+
+    /// <summary>
+    /// Click a tab by name and wait for its content to appear (polls for a marker).
+    /// WinForms only realizes the active tab's child controls, so tests must
+    /// switch tabs before asserting on their contents.
+    /// </summary>
+    public async Task NavigateToTab(string handle, string tabName, string? contentMarker = null)
+    {
+        var tabRef = FindRefByName(handle, tabName);
+        if (tabRef == null) return;
+
+        var clickTool = new ClickTool(Elements);
+        await CallTool(clickTool, new { @ref = tabRef });
+
+        if (contentMarker == null)
+        {
+            await Task.Delay(200);
+            return;
+        }
+
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < 5000)
+        {
+            await Task.Delay(100);
+            if (TakeSnapshot(handle).Contains(contentMarker))
+                return;
+        }
+    }
+
+    /// <summary>
     /// Find an element ref by name in the snapshot of the given window.
     /// Takes a fresh snapshot each time — use the overload accepting a
     /// pre-built snapshot when multiple lookups are needed.

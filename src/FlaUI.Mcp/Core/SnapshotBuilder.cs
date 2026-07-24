@@ -1,8 +1,41 @@
+using System.Diagnostics;
 using System.Text;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 
 namespace PlaywrightWindows.Mcp.Core;
+
+/// <summary>
+/// Options that bound how much of a UI Automation tree a snapshot walks.
+/// Used to produce shallow snapshots that stay fast on large grids and deep
+/// modal window trees instead of timing out.
+/// </summary>
+public sealed record SnapshotOptions
+{
+    /// <summary>Maximum tree depth to descend (0 = window only). Default 10.</summary>
+    public int MaxDepth { get; init; } = 10;
+
+    /// <summary>
+    /// Maximum number of children emitted per node before truncating with a
+    /// marker. Null = unlimited. Useful for large grids/lists.
+    /// </summary>
+    public int? MaxChildrenPerNode { get; init; }
+
+    /// <summary>
+    /// Maximum total number of elements to emit across the whole snapshot before
+    /// stopping with a marker. Null = unlimited. A hard cap on total work.
+    /// </summary>
+    public int? MaxElements { get; init; }
+
+    /// <summary>
+    /// Optional wall-clock budget for building the snapshot. When exceeded the
+    /// walk stops and a marker is emitted. Null = no time limit.
+    /// </summary>
+    public TimeSpan? TimeBudget { get; init; }
+
+    /// <summary>Default options preserving the original full-depth behavior.</summary>
+    public static SnapshotOptions Default { get; } = new();
+}
 
 /// <summary>
 /// Builds agent-friendly accessibility snapshots from UI Automation trees
@@ -20,17 +53,59 @@ public class SnapshotBuilder
 
     public string BuildSnapshot(string windowHandle, AutomationElement root)
     {
+        return BuildSnapshot(windowHandle, root, new SnapshotOptions { MaxDepth = _maxDepth });
+    }
+
+    public string BuildSnapshot(string windowHandle, AutomationElement root, SnapshotOptions options)
+    {
         // Clear previous elements for this window
         _elementRegistry.ClearWindow(windowHandle);
 
         var sb = new StringBuilder();
-        BuildElementSnapshot(sb, windowHandle, root, 0);
+        var state = new SnapshotState(options);
+        BuildElementSnapshot(sb, windowHandle, root, 0, state);
+
+        if (state.Truncated)
+        {
+            sb.AppendLine(
+                "- ... snapshot truncated by limits (increase maxDepth/maxChildren/maxElements " +
+                "or target a specific element to see more)");
+        }
+
         return sb.ToString();
     }
 
-    private void BuildElementSnapshot(StringBuilder sb, string windowHandle, AutomationElement element, int depth)
+    /// <summary>Mutable bookkeeping for a single snapshot build.</summary>
+    private sealed class SnapshotState
     {
-        if (depth > _maxDepth) return;
+        public SnapshotState(SnapshotOptions options)
+        {
+            Options = options;
+            Stopwatch = options.TimeBudget.HasValue ? Stopwatch.StartNew() : null;
+        }
+
+        public SnapshotOptions Options { get; }
+        public int EmittedCount { get; set; }
+        public bool Truncated { get; set; }
+        public Stopwatch? Stopwatch { get; }
+
+        public bool ElementBudgetReached =>
+            Options.MaxElements.HasValue && EmittedCount >= Options.MaxElements.Value;
+
+        public bool TimeBudgetExceeded =>
+            Stopwatch != null && Options.TimeBudget.HasValue && Stopwatch.Elapsed >= Options.TimeBudget.Value;
+    }
+
+    private void BuildElementSnapshot(
+        StringBuilder sb, string windowHandle, AutomationElement element, int depth, SnapshotState state)
+    {
+        if (depth > state.Options.MaxDepth) return;
+
+        if (state.ElementBudgetReached || state.TimeBudgetExceeded)
+        {
+            state.Truncated = true;
+            return;
+        }
 
         // Skip elements with no meaningful content
         var name = GetElementName(element);
@@ -41,19 +116,43 @@ public class SnapshotBuilder
 
         // Register element and get ref
         var refId = _elementRegistry.Register(windowHandle, element);
+        state.EmittedCount++;
 
         // Build the line
         var indent = new string(' ', depth * 2);
         var line = BuildElementLine(element, refId, name, role);
         sb.AppendLine($"{indent}- {line}");
 
+        // Don't descend past the depth limit
+        if (depth >= state.Options.MaxDepth) return;
+
         // Process children
         try
         {
             var children = element.FindAllChildren();
+            var childIndent = new string(' ', (depth + 1) * 2);
+            var limit = state.Options.MaxChildrenPerNode;
+            var processed = 0;
+
             foreach (var child in children)
             {
-                BuildElementSnapshot(sb, windowHandle, child, depth + 1);
+                if (state.ElementBudgetReached || state.TimeBudgetExceeded)
+                {
+                    state.Truncated = true;
+                    break;
+                }
+
+                if (limit.HasValue && processed >= limit.Value)
+                {
+                    var remaining = children.Length - processed;
+                    sb.AppendLine(
+                        $"{childIndent}- ... ({remaining} more children not shown; increase maxChildren)");
+                    state.Truncated = true;
+                    break;
+                }
+
+                BuildElementSnapshot(sb, windowHandle, child, depth + 1, state);
+                processed++;
             }
         }
         catch

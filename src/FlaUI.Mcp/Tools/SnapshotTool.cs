@@ -25,7 +25,9 @@ public class SnapshotTool : ToolBase
     public override string Description => 
         "Capture accessibility snapshot of a window. Returns a structured tree with element refs " +
         "that can be used with windows_click, windows_type, etc. This is the primary tool for " +
-        "understanding window contents - use it before interacting with elements.";
+        "understanding window contents - use it before interacting with elements. " +
+        "For large grids or deep modal windows that time out, take a shallow snapshot with " +
+        "maxDepth/maxChildren/maxElements, then re-snapshot a specific element for more detail.";
 
     public override object InputSchema => new
     {
@@ -36,6 +38,21 @@ public class SnapshotTool : ToolBase
             {
                 type = "string",
                 description = "Window handle from windows_launch or windows_list_windows. If omitted, uses the most recently launched window."
+            },
+            maxDepth = new
+            {
+                type = "integer",
+                description = "Maximum tree depth to descend (0 = window only). Lower values give a fast shallow snapshot. Default 10."
+            },
+            maxChildren = new
+            {
+                type = "integer",
+                description = "Maximum children shown per node before truncating with a marker. Useful for large grids/lists. Default: unlimited."
+            },
+            maxElements = new
+            {
+                type = "integer",
+                description = "Maximum total elements to emit before stopping with a marker. Hard cap on total work to avoid timeouts. Default: unlimited."
             }
         }
     };
@@ -43,6 +60,12 @@ public class SnapshotTool : ToolBase
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
         var handle = GetStringArgument(arguments, "handle");
+        var options = new SnapshotOptions
+        {
+            MaxDepth = GetIntArgument(arguments, "maxDepth", 10),
+            MaxChildrenPerNode = GetIntArgument(arguments, "maxChildren"),
+            MaxElements = GetIntArgument(arguments, "maxElements")
+        };
 
         try
         {
@@ -86,7 +109,7 @@ public class SnapshotTool : ToolBase
                 handle = _sessionManager.RegisterWindow(window);
             }
 
-            var snapshot = _snapshotBuilder.BuildSnapshot(handle!, window);
+            var snapshot = _snapshotBuilder.BuildSnapshot(handle!, window, options);
             return Task.FromResult(TextResult(snapshot));
         }
         catch (Exception ex)
