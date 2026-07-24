@@ -108,6 +108,7 @@ Or using `dotnet run`:
 | `windows_send_keys` | Send key presses or key chords (for example `Ctrl+A`) |
 | `windows_fill` | Clear and fill a text field |
 | `windows_get_text` | Get text content of an element |
+| `windows_get_properties` | Inspect UI Automation properties of an element (e.g. `isEnabled`, `isOffscreen`) |
 | `windows_screenshot` | Capture window/element as PNG |
 | `windows_list_windows` | List all open windows |
 | `windows_focus` | Bring a window to foreground |
@@ -206,6 +207,14 @@ This comes from **Windows UI Automation** - the same API screen readers use. Eac
 - **Name** ("Seven", "Display is 0")
 - **Ref** (w1e47) - a handle for interaction
 - **State** ([disabled], [readonly], [checked])
+
+For deeper inspection, `windows_snapshot` accepts an optional `properties` list to emit
+any standard UIA property inline as `[name=value]` (for example
+`properties: ["className", "helpText", "isKeyboardFocusable"]`). To see every property a
+single element supports, call `windows_get_properties` with its ref. Only standard UI
+Automation properties are available - vendor-specific .NET control properties (such as
+Infragistics `UltraTab.Visible`) are not exposed by UI Automation, but their UIA
+equivalents (`isOffscreen`, `isEnabled`) are.
 
 ### Why Not Screenshots?
 

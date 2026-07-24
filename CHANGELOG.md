@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-net48] - 2026-07-24
+
+### Added
+- `windows_get_properties` MCP tool to inspect the UI Automation properties of a single
+  element by ref. Pass a `properties` list of friendly names to read specific ones, or
+  omit it to dump all supported properties - useful for diagnosing why an element is
+  hidden or not interactable (for example `isEnabled`, `isOffscreen`, `isKeyboardFocusable`,
+  `boundingRectangle`).
+- `windows_snapshot` now accepts an optional `properties` list to emit any standard UIA
+  property inline on each element as `[name=value]` (for example
+  `["className", "helpText", "isKeyboardFocusable"]`). Property names are resolved from the
+  full standard UIA property set via reflection, and unknown names are ignored with a note.
+
+### Notes
+- Only standard UI Automation properties are exposed. Vendor-specific .NET control
+  properties (for example Infragistics `UltraTab.Visible`/`Enabled`) are not available
+  through UI Automation; use their UIA equivalents `isOffscreen` (≈ visible) and `isEnabled`.
+
 ## [0.4.0-net48] - 2026-07-24
 
 ### Added

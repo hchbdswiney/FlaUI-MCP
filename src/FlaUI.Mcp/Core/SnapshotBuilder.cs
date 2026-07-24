@@ -33,6 +33,13 @@ public sealed record SnapshotOptions
     /// </summary>
     public TimeSpan? TimeBudget { get; init; }
 
+    /// <summary>
+    /// Optional list of friendly UIA property names (e.g. "helpText", "className",
+    /// "isKeyboardFocusable") to emit inline on each element as [name=value].
+    /// Null/empty = no extra properties (default). Unknown names are ignored with a note.
+    /// </summary>
+    public IReadOnlyList<string>? Properties { get; init; }
+
     /// <summary>Default options preserving the original full-depth behavior.</summary>
     public static SnapshotOptions Default { get; } = new();
 }
@@ -63,6 +70,7 @@ public class SnapshotBuilder
 
         var sb = new StringBuilder();
         var state = new SnapshotState(options);
+        ResolveRequestedProperties(root, state);
         BuildElementSnapshot(sb, windowHandle, root, 0, state);
 
         if (state.Truncated)
@@ -72,7 +80,41 @@ public class SnapshotBuilder
                 "or target a specific element to see more)");
         }
 
+        if (state.UnknownProperties.Count > 0)
+        {
+            sb.AppendLine(
+                $"- ... unknown properties ignored: {string.Join(", ", state.UnknownProperties)}");
+        }
+
         return sb.ToString();
+    }
+
+    private static void ResolveRequestedProperties(AutomationElement root, SnapshotState state)
+    {
+        var requested = state.Options.Properties;
+        if (requested == null || requested.Count == 0) return;
+
+        UiaPropertyCatalog catalog;
+        try
+        {
+            catalog = UiaPropertyCatalog.For(root);
+        }
+        catch
+        {
+            return;
+        }
+
+        foreach (var name in requested)
+        {
+            if (catalog.TryResolve(name, out var propertyId))
+            {
+                state.ResolvedProperties.Add((name.Trim(), propertyId));
+            }
+            else if (!string.IsNullOrWhiteSpace(name))
+            {
+                state.UnknownProperties.Add(name.Trim());
+            }
+        }
     }
 
     /// <summary>Mutable bookkeeping for a single snapshot build.</summary>
@@ -88,6 +130,8 @@ public class SnapshotBuilder
         public int EmittedCount { get; set; }
         public bool Truncated { get; set; }
         public Stopwatch? Stopwatch { get; }
+        public List<(string Label, FlaUI.Core.Identifiers.PropertyId Id)> ResolvedProperties { get; } = new();
+        public List<string> UnknownProperties { get; } = new();
 
         public bool ElementBudgetReached =>
             Options.MaxElements.HasValue && EmittedCount >= Options.MaxElements.Value;
@@ -120,7 +164,7 @@ public class SnapshotBuilder
 
         // Build the line
         var indent = new string(' ', depth * 2);
-        var line = BuildElementLine(element, refId, name, role);
+        var line = BuildElementLine(element, refId, name, role, state);
         sb.AppendLine($"{indent}- {line}");
 
         // Don't descend past the depth limit
@@ -161,7 +205,7 @@ public class SnapshotBuilder
         }
     }
 
-    private string BuildElementLine(AutomationElement element, string refId, string? name, string role)
+    private string BuildElementLine(AutomationElement element, string refId, string? name, string role, SnapshotState state)
     {
         var parts = new List<string>();
 
@@ -182,6 +226,15 @@ public class SnapshotBuilder
         if (states.Count > 0)
         {
             parts.AddRange(states.Select(s => $"[{s}]"));
+        }
+
+        // Requested extra UIA properties (opt-in)
+        foreach (var (label, propertyId) in state.ResolvedProperties)
+        {
+            if (UiaPropertyCatalog.TryReadValue(element, propertyId, out var value))
+            {
+                parts.Add($"[{label}={EscapeName(value)}]");
+            }
         }
 
         return string.Join(" ", parts);

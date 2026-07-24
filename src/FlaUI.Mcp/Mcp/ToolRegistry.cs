@@ -180,4 +180,23 @@ public abstract class ToolBase : ITool
 
     protected int GetIntArgument(JsonElement? arguments, string name, int defaultValue)
         => GetIntArgument(arguments, name) ?? defaultValue;
+
+    protected string[]? GetStringArrayArgument(JsonElement? arguments, string name)
+    {
+        if (arguments == null) return null;
+        if (!arguments.Value.TryGetProperty(name, out var prop)) return null;
+        if (prop.ValueKind != JsonValueKind.Array) return null;
+
+        var values = new List<string>();
+        foreach (var item in prop.EnumerateArray())
+        {
+            var value = item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                values.Add(value!);
+            }
+        }
+
+        return values.ToArray();
+    }
 }

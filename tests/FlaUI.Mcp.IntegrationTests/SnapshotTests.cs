@@ -67,6 +67,26 @@ public class SnapshotTests
     }
 
     [Fact]
+    public void Wpf_Snapshot_EmitsRequestedProperties()
+    {
+        var options = new SnapshotOptions { Properties = new[] { "className" } };
+        var snapshot = _fixture.TakeSnapshot(_fixture.WpfHandle, options);
+        _output.WriteLine(snapshot);
+
+        Assert.Contains("[className=", snapshot);
+    }
+
+    [Fact]
+    public void Wpf_Snapshot_UnknownProperty_IsNoted()
+    {
+        var options = new SnapshotOptions { Properties = new[] { "notARealProperty" } };
+        var snapshot = _fixture.TakeSnapshot(_fixture.WpfHandle, options);
+        _output.WriteLine(snapshot);
+
+        Assert.Contains("unknown properties ignored: notARealProperty", snapshot);
+    }
+
+    [Fact]
     public async Task WinForms_Snapshot_ContainsButtons()
     {
         // Navigate to Buttons tab first — another test may have switched tabs
@@ -119,9 +139,12 @@ public class SnapshotTests
         await _fixture.NavigateToTab(_fixture.WinFormsHandle, "Stress", "Stress Row 1");
 
         // The deep marker sits ~25 panels down, past the default depth of 10,
-        // so an explicit high maxDepth is required to reach it.
+        // so an explicit high maxDepth is required to reach it. The marker is
+        // reachable by DEPTH, not breadth, so we cap children per node to avoid
+        // a full walk of the sibling 1000-row StressDataGrid (thousands of cells),
+        // which is irrelevant to this assertion and otherwise makes the test crawl.
         var snapshot = _fixture.TakeSnapshot(
-            _fixture.WinFormsHandle, new SnapshotOptions { MaxDepth = 40 });
+            _fixture.WinFormsHandle, new SnapshotOptions { MaxDepth = 40, MaxChildrenPerNode = 20 });
         Assert.Contains("Deep Nested Marker", snapshot);
     }
 

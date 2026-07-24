@@ -118,6 +118,26 @@ Get text content of an element.
 { "ref": "w1e11" }  // Returns "0" from the display
 ```
 
+### `windows_get_properties`
+Inspect the underlying UI Automation properties of a single element. Useful for
+diagnosing why an element is hidden or not interactable. Pass `properties` to read
+specific ones, or omit it to dump all supported properties.
+```json
+{ "ref": "w1e5" }                                            // Dump all supported properties
+{ "ref": "w1e5", "properties": ["isEnabled", "isOffscreen"] } // Read specific ones
+{ "ref": "w1e5", "properties": ["helpText"], "includeUnset": true }
+```
+
+Only standard UIA properties are exposed. Vendor-specific .NET control properties
+(e.g. Infragistics `UltraTab.Visible`/`Enabled`) are **not** available through UI
+Automation - use their UIA equivalents `isOffscreen` (≈ visible) and `isEnabled`.
+
+The snapshot itself can also emit these inline via its optional `properties` argument:
+```json
+{ "properties": ["className", "helpText", "isKeyboardFocusable"] }
+// → button "Save" [ref=w1e5] [className=Button] [helpText="Save the file"]
+```
+
 ### `windows_list_windows`
 List all open windows with their titles and process info.
 ```json

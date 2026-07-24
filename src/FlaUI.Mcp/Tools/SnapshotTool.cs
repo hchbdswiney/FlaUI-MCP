@@ -53,6 +53,14 @@ public class SnapshotTool : ToolBase
             {
                 type = "integer",
                 description = "Maximum total elements to emit before stopping with a marker. Hard cap on total work to avoid timeouts. Default: unlimited."
+            },
+            properties = new
+            {
+                type = "array",
+                items = new { type = "string" },
+                description = "Optional list of friendly UIA property names to emit inline on each element as [name=value]. " +
+                    "Examples: helpText, className, isKeyboardFocusable, boundingRectangle, itemStatus, automationId, frameworkId. " +
+                    "Unknown names are ignored with a note. Use windows_get_properties on a single element to discover all available properties."
             }
         }
     };
@@ -64,7 +72,8 @@ public class SnapshotTool : ToolBase
         {
             MaxDepth = GetIntArgument(arguments, "maxDepth", 10),
             MaxChildrenPerNode = GetIntArgument(arguments, "maxChildren"),
-            MaxElements = GetIntArgument(arguments, "maxElements")
+            MaxElements = GetIntArgument(arguments, "maxElements"),
+            Properties = GetStringArrayArgument(arguments, "properties")
         };
 
         try
