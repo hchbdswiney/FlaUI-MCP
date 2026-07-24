@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0-net48] - 2026-07-24
+
+### Added
+- `windows_click_native` MCP tool - a UI-Automation-independent fallback that forces a
+  window/dialog to the OS foreground via Win32 (`AllowSetForegroundWindow` +
+  `AttachThreadInput` + `BringWindowToTop`/`SetForegroundWindow`) and issues a real mouse
+  click (`SendInput`) at a captioned child control's rectangle. Matches children via
+  `EnumChildWindows` with the mnemonic `&` stripped (`&Yes` matches `Yes`), supports
+  `childClass`/`index` disambiguation, and posts a secondary `WM_*BUTTONDOWN/UP` to the child.
+  A `#32770` `WM_COMMAND` fast-path is used only when the modal class is genuinely `#32770`;
+  rich WinForms/Infragistics `UltraButton` dialogs (which ignore `BM_CLICK`/`WM_COMMAND`) are
+  actuated by the real click. Works on a modal even while it blocks its owner and UIA is
+  timing out.
+- `windows_dismiss_modal` MCP tool - a convenience specialization that resolves the modal
+  blocking an app (or an explicit `modalHandle`) using the Win32 modal finder (no UIA
+  snapshot), clicks a captioned button (`Yes`/`No`/`OK`/`Cancel`/…), and re-checks that the
+  modal is gone and the owner re-enabled.
+- `windows_click_point` MCP tool - the guaranteed last-resort coordinate click for controls
+  with no UIA peer and no child `HWND` (e.g. custom-drawn Infragistics buttons). Accepts
+  `screen`, `window`, `image`, or `normalized` coordinate spaces, translates the point to a
+  physical virtual-desktop coordinate, and clicks via `SendInput`
+  (`MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK`). Out-of-range points are rejected instead
+  of clicking the wrong place.
+
+### Changed
+- `windows_screenshot` now returns self-describing capture metadata alongside the PNG
+  (`origin` in virtual-screen coordinates - can be negative on multi-monitor -, `widthPx`/
+  `heightPx`, `screenWidth`/`screenHeight`, `dpi`/`scale`). The most recent capture per
+  handle (or full-screen) is remembered so `windows_click_point` with `space="image"` maps an
+  image pixel straight back to the correct physical screen coordinate. The process runs
+  Per-Monitor-DPI-Aware v2 and captures at device resolution, so image pixels map 1:1 to
+  screen pixels.
+- `windows_focus` now falls back to the pure Win32 foreground sequence when the UI Automation
+  focus path times out or fails (so it works on UIA-dead modals) and reports which path won
+  (`path=uia` or `path=win32`).
+
 ## [0.6.0-net48] - 2026-07-24
 
 ### Added

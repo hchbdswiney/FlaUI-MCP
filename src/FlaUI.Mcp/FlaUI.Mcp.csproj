@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>FlaUI.Mcp</AssemblyName>
     <RootNamespace>FlaUI.Mcp</RootNamespace>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
     <Authors>Scott Hanselman</Authors>
     <Description>FlaUI-MCP: MCP server for Windows desktop automation using FlaUI and UI Automation. Brings the Playwright-style accessibility-snapshot + element-ref workflow to Windows apps (it is not Playwright).</Description>
     <RepositoryUrl>https://github.com/shanselman/FlaUI-MCP</RepositoryUrl>

@@ -40,10 +40,14 @@ public class SnapshotTests
     }
 
     [Fact]
-    public void WinForms_Snapshot_ContainsTabControl()
+    public async Task WinForms_Snapshot_ContainsTabControl()
     {
         var builder = new SnapshotBuilder(_fixture.Elements);
-        var snapshot = builder.BuildSnapshot(_fixture.WinFormsHandle, _fixture.GetWinFormsWindow()!);
+        // A full (uncapped) snapshot can be slow if a prior test left the app on the
+        // 1000-row Stress tab, so emit a heartbeat while it runs.
+        var snapshot = await TestAppFixture.RunWithHeartbeatAsync(
+            "full WinForms snapshot (tab control)",
+            () => builder.BuildSnapshot(_fixture.WinFormsHandle, _fixture.GetWinFormsWindow()!));
         _output.WriteLine(snapshot);
 
         Assert.Contains("Buttons", snapshot);
@@ -89,9 +93,10 @@ public class SnapshotTests
     [Fact]
     public async Task WinForms_Snapshot_ContainsButtons()
     {
-        // Navigate to Buttons tab first — another test may have switched tabs
-        var snapshot = _fixture.TakeSnapshot(_fixture.WinFormsHandle);
-        var tabRef = TestAppFixture.FindRefInSnapshot(snapshot, "Buttons");
+        // Navigate to Buttons tab first — another test may have switched tabs.
+        // The tab header is shallow, so a bounded lookup finds it without walking
+        // a large grid a prior test may have left realized.
+        var tabRef = _fixture.FindRefByName(_fixture.WinFormsHandle, "Buttons");
         if (tabRef != null)
         {
             var clickTool = new ClickTool(_fixture.Elements);
@@ -99,7 +104,9 @@ public class SnapshotTests
             await Task.Delay(100);
         }
 
-        var snapshot2 = _fixture.TakeSnapshot(_fixture.WinFormsHandle);
+        var snapshot2 = await TestAppFixture.RunWithHeartbeatAsync(
+            "full WinForms snapshot (buttons)",
+            () => _fixture.TakeSnapshot(_fixture.WinFormsHandle));
         Assert.Contains("Click Me", snapshot2);
         Assert.Contains("Conditional Button", snapshot2);
     }
@@ -107,17 +114,19 @@ public class SnapshotTests
     [Fact]
     public async Task WinForms_Snapshot_ContainsGridData()
     {
-        // Navigate to Grid tab first — WinForms only shows active tab content
-        var snapshot = _fixture.TakeSnapshot(_fixture.WinFormsHandle);
-        var gridTabRef = TestAppFixture.FindRefInSnapshot(snapshot, "Grid");
+        // Navigate to Grid tab first — WinForms only shows active tab content.
+        // The tab header is shallow, so a bounded lookup is fast.
+        var gridTabRef = _fixture.FindRefByName(_fixture.WinFormsHandle, "Grid");
 
         Assert.NotNull(gridTabRef);
 
         var clickTool = new ClickTool(_fixture.Elements);
         await _fixture.CallTool(clickTool, new { @ref = gridTabRef });
 
-        // Poll for grid content to appear after tab switch
+        // Poll for grid content to appear after tab switch. Realizing the grid can
+        // take a few seconds, so emit a heartbeat while we wait.
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        var nextBeat = TimeSpan.FromSeconds(1.5);
         string snapshot2 = "";
         while (sw.ElapsedMilliseconds < 5000)
         {
@@ -125,6 +134,12 @@ public class SnapshotTests
             snapshot2 = _fixture.TakeSnapshot(_fixture.WinFormsHandle);
             if (snapshot2.Contains("Test Data"))
                 break;
+
+            if (sw.Elapsed >= nextBeat)
+            {
+                TestAppFixture.Heartbeat($"waiting for grid data to render, {sw.Elapsed.TotalSeconds:F1}s elapsed...");
+                nextBeat += TimeSpan.FromSeconds(1.5);
+            }
         }
 
         _output.WriteLine(snapshot2.Substring(0, Math.Min(2000, snapshot2.Length)));

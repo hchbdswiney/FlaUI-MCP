@@ -166,6 +166,13 @@ public class TestAppFixture : IAsyncLifetime
     }
 
     /// <summary>
+    /// Emit a live progress line to the console for an intentionally long-running
+    /// wait, so users can tell a slow test is working rather than hung. Prefixes
+    /// <c>[heartbeat]</c> for easy grepping.
+    /// </summary>
+    public static void Heartbeat(string message) => WriteHeartbeat($"[heartbeat] {message}");
+
+    /// <summary>
     /// Take a snapshot of a window and return the text.
     /// </summary>
     public string TakeSnapshot(string handle)
@@ -220,7 +227,11 @@ public class TestAppFixture : IAsyncLifetime
             return;
         }
 
+        // Navigating a tab that hosts a large grid (e.g. the 1000-row Stress tab)
+        // can take several seconds while the app realizes its rows. Emit a periodic
+        // heartbeat so a long wait is visibly intentional, not a hang.
         var sw = Stopwatch.StartNew();
+        var nextBeat = TimeSpan.FromSeconds(1.5);
         while (sw.ElapsedMilliseconds < 5000)
         {
             await Task.Delay(100);
@@ -228,6 +239,12 @@ public class TestAppFixture : IAsyncLifetime
             // so we must not walk the entire large grid on every poll iteration.
             if (TakeSnapshot(handle, NavigationSnapshotOptions).Contains(contentMarker))
                 return;
+
+            if (sw.Elapsed >= nextBeat)
+            {
+                Heartbeat($"navigating to '{tabName}' tab: waiting for \"{contentMarker}\", {sw.Elapsed.TotalSeconds:F1}s elapsed...");
+                nextBeat += TimeSpan.FromSeconds(1.5);
+            }
         }
     }
 

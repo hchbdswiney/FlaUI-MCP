@@ -186,7 +186,9 @@ public class FocusWindowTool : ToolBase
     public override string Name => "windows_focus";
 
     public override string Description => 
-        "Bring a window to the foreground and give it focus.";
+        "Bring a window to the foreground and give it focus. Tries the UI Automation focus path first, then " +
+        "automatically falls back to a pure Win32 foreground sequence (AttachThreadInput + SetForegroundWindow) " +
+        "when UIA times out or fails - so it works on UIA-dead modals. Reports which path won (path=uia or path=win32).";
 
     public override object InputSchema => new
     {
@@ -217,31 +219,100 @@ public class FocusWindowTool : ToolBase
         var title = GetStringArgument(arguments, "title");
         var timeoutMs = GetIntArgument(arguments, "timeoutMs", 10000);
 
-        return await RunBoundedAsync(timeoutMs, Name, () =>
+        if (string.IsNullOrEmpty(handle) && string.IsNullOrEmpty(title))
+        {
+            return ErrorResult("Either 'handle' or 'title' is required");
+        }
+
+        // Resolve the native HWND up front (pure Win32) so the fallback works even
+        // when the UIA path is stalled.
+        var hwnd = ResolveHwnd(handle, title, out var label);
+
+        // Attempt the UIA focus path first, bounded to part of the budget so a
+        // stalled provider cannot consume the whole time before the Win32 fallback.
+        var uiaBudget = Math.Max(1000, timeoutMs / 2);
+        var uiaTask = Task.Run<(bool ok, string? error, string? label)>(() =>
         {
             try
             {
                 if (!string.IsNullOrEmpty(handle))
                 {
-                    _sessionManager.FocusWindow(handle);
-                    return TextResult($"Focused window {handle}");
+                    _sessionManager.FocusWindow(handle!);
+                    return (true, null, handle);
                 }
-                else if (!string.IsNullOrEmpty(title))
-                {
-                    var (windowHandle, window) = _sessionManager.AttachToWindow(title);
-                    window.Focus();
-                    return TextResult($"Focused window \"{window.Title}\" (handle: {windowHandle})");
-                }
-                else
-                {
-                    return ErrorResult("Either 'handle' or 'title' is required");
-                }
+
+                var (windowHandle, window) = _sessionManager.AttachToWindow(title!);
+                window.Focus();
+                return (true, null, $"\"{window.Title}\" (handle: {windowHandle})");
             }
             catch (Exception ex)
             {
-                return ErrorResult($"Failed to focus window: {ex.Message}");
+                return (false, ex.Message, null);
             }
         });
+
+        string? uiaError;
+        if (await Task.WhenAny(uiaTask, Task.Delay(uiaBudget)).ConfigureAwait(false) == uiaTask)
+        {
+            var (ok, error, resolvedLabel) = await uiaTask.ConfigureAwait(false);
+            if (ok)
+            {
+                return TextResult($"Focused window {resolvedLabel}. path=uia");
+            }
+            uiaError = error;
+        }
+        else
+        {
+            uiaError = $"UIA focus timed out after {uiaBudget}ms";
+            _ = uiaTask.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+        }
+
+        // Win32 fallback: force the OS foreground without any UIA.
+        if (hwnd != IntPtr.Zero)
+        {
+            var foreground = Win32Interaction.BringToForeground(hwnd);
+            if (foreground)
+            {
+                return TextResult(
+                    $"Focused window {label} via the Win32 foreground sequence. path=win32 " +
+                    $"(UIA path failed: {uiaError})");
+            }
+
+            return ErrorResult(
+                $"Failed to focus {label}. UIA path failed ({uiaError}) and the Win32 foreground sequence " +
+                "could not take foreground - another process may hold a foreground lock. Retry after " +
+                "interacting with the target, or use windows_click_native/windows_click_point which force foreground per-action.");
+        }
+
+        return ErrorResult(
+            $"Failed to focus window: UIA path failed ({uiaError}) and no native handle was available for the Win32 fallback. " +
+            "Use windows_list_windows to get a fresh handle.");
+    }
+
+    /// <summary>Resolve a target HWND via Win32 only (no UIA), from handle or title.</summary>
+    private IntPtr ResolveHwnd(string? handle, string? title, out string label)
+    {
+        if (!string.IsNullOrEmpty(handle))
+        {
+            label = handle!;
+            return _sessionManager.GetNativeHandle(handle!);
+        }
+
+        if (!string.IsNullOrEmpty(title))
+        {
+            label = $"\"{title}\"";
+            var match = Native.EnumerateTopLevelWindows(visibleOnly: true)
+                .FirstOrDefault(w => !string.IsNullOrEmpty(w.Title) &&
+                    w.Title.IndexOf(title!, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (match != null)
+            {
+                label = $"\"{match.Title}\"";
+                return match.Handle;
+            }
+        }
+
+        label = handle ?? title ?? "(unknown)";
+        return IntPtr.Zero;
     }
 }
 

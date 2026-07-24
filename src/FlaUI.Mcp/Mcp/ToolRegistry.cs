@@ -181,6 +181,19 @@ public abstract class ToolBase : ITool
     protected int GetIntArgument(JsonElement? arguments, string name, int defaultValue)
         => GetIntArgument(arguments, name) ?? defaultValue;
 
+    protected double? GetDoubleArgument(JsonElement? arguments, string name)
+    {
+        if (arguments == null) return null;
+        if (!arguments.Value.TryGetProperty(name, out var prop)) return null;
+
+        return prop.ValueKind switch
+        {
+            JsonValueKind.Number when prop.TryGetDouble(out var value) => value,
+            JsonValueKind.String when double.TryParse(prop.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value) => value,
+            _ => null
+        };
+    }
+
     protected string[]? GetStringArrayArgument(JsonElement? arguments, string name)
     {
         if (arguments == null) return null;

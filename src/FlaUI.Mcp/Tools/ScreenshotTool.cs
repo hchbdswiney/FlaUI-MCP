@@ -11,17 +11,22 @@ public class ScreenshotTool : ToolBase
 {
     private readonly SessionManager _sessionManager;
     private readonly ElementRegistry _elementRegistry;
+    private readonly CaptureRegistry _captureRegistry;
 
-    public ScreenshotTool(SessionManager sessionManager, ElementRegistry elementRegistry)
+    public ScreenshotTool(SessionManager sessionManager, ElementRegistry elementRegistry, CaptureRegistry captureRegistry)
     {
         _sessionManager = sessionManager;
         _elementRegistry = elementRegistry;
+        _captureRegistry = captureRegistry;
     }
 
     public override string Name => "windows_screenshot";
 
-    public override string Description => 
-        "Take a screenshot of a window or specific element. Returns the image as base64-encoded PNG.";
+    public override string Description =>
+        "Take a screenshot of a window or specific element. Returns the image as base64-encoded PNG " +
+        "plus self-describing capture metadata (origin in virtual-screen coordinates, pixel size, DPI/scale). " +
+        "The metadata lets windows_click_point map an image pixel back to a physical screen coordinate - " +
+        "use space=\"image\" on the most recent capture, or space=\"normalized\" for resolution-independent fractions.";
 
     public override object InputSchema => new
     {
@@ -79,6 +84,13 @@ public class ScreenshotTool : ToolBase
         {
             CaptureImage capture;
 
+            // Anchor for metadata: origin in virtual-screen coordinates, DPI source
+            // window, and the CaptureRegistry key used by windows_click_point.
+            int originX;
+            int originY;
+            IntPtr dpiHwnd = IntPtr.Zero;
+            string metadataKey;
+
             if (background && (fullScreen || !string.IsNullOrEmpty(refId) || string.IsNullOrEmpty(handle)))
             {
                 return Task.FromResult(ErrorResult("background capture requires a window handle and cannot be combined with ref or fullScreen"));
@@ -87,6 +99,10 @@ public class ScreenshotTool : ToolBase
             if (fullScreen)
             {
                 capture = Capture.Screen();
+                originX = Native.GetSystemMetrics(Native.SM_XVIRTUALSCREEN);
+                originY = Native.GetSystemMetrics(Native.SM_YVIRTUALSCREEN);
+                dpiHwnd = Native.GetForegroundWindow();
+                metadataKey = CaptureRegistry.FullScreenKey;
             }
             else if (!string.IsNullOrEmpty(refId))
             {
@@ -96,6 +112,11 @@ public class ScreenshotTool : ToolBase
                     return Task.FromResult(ErrorResult($"Element not found: {refId}"));
                 }
                 capture = Capture.Element(element);
+                var bounds = element.BoundingRectangle;
+                originX = bounds.Left;
+                originY = bounds.Top;
+                try { element.Properties.NativeWindowHandle.TryGetValue(out dpiHwnd); } catch { }
+                metadataKey = refId!;
             }
             else if (!string.IsNullOrEmpty(handle))
             {
@@ -105,9 +126,26 @@ public class ScreenshotTool : ToolBase
                     return Task.FromResult(ErrorResult($"Window not found: {handle}"));
                 }
 
+                var hwnd = _sessionManager.GetNativeHandle(handle);
+                dpiHwnd = hwnd;
+                if (hwnd != IntPtr.Zero && Native.GetWindowRect(hwnd, out var rect))
+                {
+                    originX = rect.Left;
+                    originY = rect.Top;
+                }
+                else
+                {
+                    var bounds = window.BoundingRectangle;
+                    originX = bounds.Left;
+                    originY = bounds.Top;
+                }
+                metadataKey = handle!;
+
                 if (background && NativeWindowCapture.TryCaptureWindow(window, out var backgroundImage, out _))
                 {
-                    return Task.FromResult(BuildScreenshotResult(backgroundImage, normalizedSavePath, overwrite));
+                    RecordMetadata(metadataKey, originX, originY, dpiHwnd, backgroundImage);
+                    return Task.FromResult(BuildScreenshotResult(backgroundImage, normalizedSavePath, overwrite,
+                        _captureRegistry.Get(metadataKey)));
                 }
 
                 capture = Capture.Element(window);
@@ -134,6 +172,11 @@ public class ScreenshotTool : ToolBase
                 }
 
                 capture = Capture.Element(current);
+                var bounds = current.BoundingRectangle;
+                originX = bounds.Left;
+                originY = bounds.Top;
+                try { current.Properties.NativeWindowHandle.TryGetValue(out dpiHwnd); } catch { }
+                metadataKey = CaptureRegistry.FullScreenKey;
             }
 
             byte[] imageData;
@@ -144,12 +187,40 @@ public class ScreenshotTool : ToolBase
                 imageData = stream.ToArray();
             }
 
-            return Task.FromResult(BuildScreenshotResult(imageData, normalizedSavePath, overwrite));
+            RecordMetadata(metadataKey, originX, originY, dpiHwnd, imageData);
+
+            return Task.FromResult(BuildScreenshotResult(imageData, normalizedSavePath, overwrite,
+                _captureRegistry.Get(metadataKey)));
         }
         catch (Exception ex)
         {
             return Task.FromResult(ErrorResult($"Failed to capture screenshot: {ex.Message}"));
         }
+    }
+
+    private void RecordMetadata(string key, int originX, int originY, IntPtr dpiHwnd, byte[] imageData)
+    {
+        int widthPx;
+        int heightPx;
+        try
+        {
+            using var ms = new MemoryStream(imageData);
+            using var bmp = System.Drawing.Image.FromStream(ms);
+            widthPx = bmp.Width;
+            heightPx = bmp.Height;
+        }
+        catch
+        {
+            return;
+        }
+
+        var dpi = dpiHwnd != IntPtr.Zero ? Native.GetWindowDpi(dpiHwnd) : 96;
+        var scale = dpi / 96.0;
+
+        // Process is Per-Monitor-DPI-Aware v2 and captures at device resolution, so
+        // image pixels map 1:1 to physical screen units.
+        _captureRegistry.Record(key, new CaptureMetadata(
+            originX, originY, widthPx, heightPx, widthPx, heightPx, dpi, scale));
     }
 
     internal static bool TryNormalizeSavePath(string? savePath, bool overwrite, out string? normalizedPath, out string error)
@@ -228,51 +299,67 @@ public class ScreenshotTool : ToolBase
     private static bool IsValidDriveChar(char value)
         => (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z');
 
-    private static McpToolResult BuildScreenshotResult(byte[] imageData, string? savePath, bool overwrite)
+    private static McpToolResult BuildScreenshotResult(byte[] imageData, string? savePath, bool overwrite, CaptureMetadata? metadata)
     {
-        if (string.IsNullOrEmpty(savePath))
+        var content = new List<McpContent>();
+
+        if (metadata != null)
         {
-            return ImageResult(imageData, "image/png");
+            content.Add(new McpContent { Type = "text", Text = FormatMetadata(metadata) });
         }
 
-        try
+        if (!string.IsNullOrEmpty(savePath))
         {
-            var directory = Path.GetDirectoryName(savePath);
-            if (!string.IsNullOrEmpty(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            var tempPath = Path.Combine(directory ?? Directory.GetCurrentDirectory(), $"{Path.GetFileName(savePath)}.{Guid.NewGuid():N}.tmp");
             try
             {
-                File.WriteAllBytes(tempPath, imageData);
-                if (overwrite && File.Exists(savePath))
+                var directory = Path.GetDirectoryName(savePath);
+                if (!string.IsNullOrEmpty(directory))
                 {
-                    File.Delete(savePath);
+                    Directory.CreateDirectory(directory);
                 }
-                File.Move(tempPath, savePath);
+
+                var tempPath = Path.Combine(directory ?? Directory.GetCurrentDirectory(), $"{Path.GetFileName(savePath)}.{Guid.NewGuid():N}.tmp");
+                try
+                {
+                    File.WriteAllBytes(tempPath, imageData);
+                    if (overwrite && File.Exists(savePath))
+                    {
+                        File.Delete(savePath);
+                    }
+                    File.Move(tempPath, savePath);
+                }
+                finally
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                    }
+                }
             }
-            finally
+            catch (Exception ex)
             {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
+                return ErrorResult($"Failed to save screenshot to {savePath}: {ex.Message}");
             }
-        }
-        catch (Exception ex)
-        {
-            return ErrorResult($"Failed to save screenshot to {savePath}: {ex.Message}");
+
+            content.Add(new McpContent { Type = "text", Text = $"Screenshot saved to {savePath}" });
         }
 
-        return new McpToolResult
-        {
-            Content = new List<McpContent>
-            {
-                new() { Type = "text", Text = $"Screenshot saved to {savePath}" },
-                new() { Type = "image", Data = Convert.ToBase64String(imageData), MimeType = "image/png" }
-            }
-        };
+        content.Add(new McpContent { Type = "image", Data = Convert.ToBase64String(imageData), MimeType = "image/png" });
+
+        return new McpToolResult { Content = content };
     }
+
+    private static string FormatMetadata(CaptureMetadata m) =>
+        "capture: " + JsonSerializer.Serialize(new
+        {
+            origin = new { x = m.OriginX, y = m.OriginY },
+            widthPx = m.WidthPx,
+            heightPx = m.HeightPx,
+            screenWidth = m.ScreenWidth,
+            screenHeight = m.ScreenHeight,
+            dpi = m.Dpi,
+            scale = m.Scale
+        }, McpProtocol.JsonOptions) +
+        "\nUse windows_click_point with space=\"image\" (pixels within this capture) or " +
+        "space=\"normalized\" (0..1 fractions) to click a point you see here.";
 }

@@ -331,6 +331,45 @@ public class SessionManager : IDisposable
             resolvedOwner);
     }
 
+    /// <summary>
+    /// Resolve the modal dialog currently blocking <paramref name="ownerHandle"/>
+    /// (or the foreground window if not supplied) using Win32 ONLY, returning just
+    /// its HWND. Unlike <see cref="GetActiveModal"/> this never attaches a UIA
+    /// element, so it stays responsive on UIA-dead dialogs. Returns
+    /// <see cref="IntPtr.Zero"/> when no modal is active.
+    /// </summary>
+    public IntPtr ResolveActiveModalHandle(string? ownerHandle)
+    {
+        var ownerHwnd = IntPtr.Zero;
+        if (!string.IsNullOrEmpty(ownerHandle))
+        {
+            ownerHwnd = GetNativeHandle(ownerHandle!);
+        }
+        if (ownerHwnd == IntPtr.Zero)
+        {
+            ownerHwnd = Native.GetForegroundWindow();
+        }
+
+        var modalHwnd = Native.GetActiveModal(ownerHwnd);
+
+        if (modalHwnd == IntPtr.Zero)
+        {
+            var foreground = Native.GetForegroundWindow();
+            if (foreground != IntPtr.Zero && foreground != ownerHwnd
+                && Native.IsWindowVisible(foreground) && Native.IsWindowEnabled(foreground))
+            {
+                var owner = Native.GetWindow(foreground, Native.GW_OWNER);
+                var className = Native.GetWindowClass(foreground);
+                if (owner != IntPtr.Zero || className == Native.DialogClassName)
+                {
+                    modalHwnd = foreground;
+                }
+            }
+        }
+
+        return modalHwnd;
+    }
+
     public void FocusWindow(string handle)
     {
         var window = GetWindow(handle);

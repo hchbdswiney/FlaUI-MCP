@@ -7,6 +7,7 @@ DpiUtility.EnablePerMonitorV2();
 // Create shared services
 var sessionManager = new SessionManager();
 var elementRegistry = new ElementRegistry();
+var captureRegistry = new CaptureRegistry();
 
 // Register all tools
 var toolRegistry = new ToolRegistry();
@@ -18,11 +19,14 @@ toolRegistry.RegisterTool(new FillTool(elementRegistry));
 toolRegistry.RegisterTool(new GetTextTool(elementRegistry));
 toolRegistry.RegisterTool(new GetPropertiesTool(elementRegistry));
 toolRegistry.RegisterTool(new SendKeysTool(elementRegistry));
-toolRegistry.RegisterTool(new ScreenshotTool(sessionManager, elementRegistry));
+toolRegistry.RegisterTool(new ScreenshotTool(sessionManager, elementRegistry, captureRegistry));
 toolRegistry.RegisterTool(new ListWindowsTool(sessionManager));
 toolRegistry.RegisterTool(new GetActiveModalTool(sessionManager, elementRegistry));
 toolRegistry.RegisterTool(new FocusWindowTool(sessionManager));
 toolRegistry.RegisterTool(new CloseWindowTool(sessionManager));
+toolRegistry.RegisterTool(new NativeClickTool(sessionManager));
+toolRegistry.RegisterTool(new DismissModalTool(sessionManager));
+toolRegistry.RegisterTool(new ClickPointTool(sessionManager, captureRegistry));
 toolRegistry.RegisterTool(new BatchTool(sessionManager, elementRegistry));
 
 // Create and run MCP server
