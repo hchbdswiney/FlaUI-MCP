@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-net48] - 2026-07-24
+
+### Added
+- `windows_snapshot` now accepts optional `maxDepth`, `maxChildren`, and `maxElements`
+  bounds to produce fast **shallow snapshots** of large grids and deep modal window
+  trees that would otherwise time out. Truncated output includes explicit markers
+  (for example `... (N more children not shown; increase maxChildren)` and
+  `... snapshot truncated by limits (...)`); hidden elements are not assigned refs
+  until a deeper or targeted snapshot is taken. The same bounds are also supported by
+  the `snapshot` action of `windows_batch`.
+
 ## [0.3.0-net48] - 2026-07-23
 
 ### Changed
