@@ -3,7 +3,7 @@ using System.Text;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 
-namespace PlaywrightWindows.Mcp.Core;
+namespace FlaUI.Mcp.Core;
 
 /// <summary>
 /// Options that bound how much of a UI Automation tree a snapshot walks.

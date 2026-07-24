@@ -3,7 +3,7 @@ using FlaUI.Core.AutomationElements;
 using FlaUI.UIA3;
 using FlaUIApplication = FlaUI.Core.Application;
 
-namespace PlaywrightWindows.Mcp.Core;
+namespace FlaUI.Mcp.Core;
 
 /// <summary>
 /// Manages UI Automation sessions and launched applications
@@ -13,6 +13,7 @@ public class SessionManager : IDisposable
     private readonly UIA3Automation _automation;
     private readonly Dictionary<string, FlaUIApplication> _applications = new();
     private readonly Dictionary<string, Window> _windows = new();
+    private readonly Dictionary<string, IntPtr> _windowHandles = new();
     private int _windowCounter = 0;
 
     public SessionManager()
@@ -117,39 +118,217 @@ public class SessionManager : IDisposable
     {
         var handle = $"w{++_windowCounter}";
         _windows[handle] = window;
+        try
+        {
+            if (window.Properties.NativeWindowHandle.TryGetValue(out var nativeHandle) && nativeHandle != IntPtr.Zero)
+            {
+                _windowHandles[handle] = nativeHandle;
+            }
+        }
+        catch { /* provider may be busy; hwnd is optional */ }
+        return handle;
+    }
+
+    /// <summary>
+    /// Register a native window handle (HWND) and return a session handle. If the
+    /// same HWND was already registered, its existing handle is reused so refs stay
+    /// stable. The UIA element is resolved lazily via <see cref="GetWindow"/>.
+    /// </summary>
+    public string RegisterWindowHandle(IntPtr hwnd)
+    {
+        foreach (var kvp in _windowHandles)
+        {
+            if (kvp.Value == hwnd) return kvp.Key;
+        }
+
+        var handle = $"w{++_windowCounter}";
+        _windowHandles[handle] = hwnd;
         return handle;
     }
 
     public Window? GetWindow(string handle)
     {
-        return _windows.TryGetValue(handle, out var window) ? window : null;
-    }
+        if (_windows.TryGetValue(handle, out var window)) return window;
 
-    public List<(string handle, string title, string? processName)> ListWindows()
-    {
-        var desktop = _automation.GetDesktop();
-        var windows = desktop.FindAllChildren(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.Window));
-        
-        var result = new List<(string, string, string?)>();
-        foreach (var w in windows)
+        // Lazily resolve an hwnd-backed handle to a UIA element. AutomationElement
+        // .FromHandle roots the tree at exactly that HWND, so snapshots scoped to a
+        // modal handle can never leak into a sibling grid behind the disabled parent.
+        if (_windowHandles.TryGetValue(handle, out var hwnd) && hwnd != IntPtr.Zero && Native.IsWindow(hwnd))
         {
-            var window = w.AsWindow();
-            if (window != null && !string.IsNullOrEmpty(window.Title))
+            var resolved = _automation.FromHandle(hwnd)?.AsWindow();
+            if (resolved != null)
             {
-                var handle = RegisterWindow(window);
-                string? processName = null;
-                try 
-                { 
-                    processName = window.Properties.ProcessId.TryGetValue(out var pid) 
-                        ? System.Diagnostics.Process.GetProcessById(pid).ProcessName 
-                        : null; 
-                }
-                catch { }
-                
-                result.Add((handle, window.Title, processName));
+                _windows[handle] = resolved;
+                return resolved;
             }
         }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Re-resolve a handle's UIA element directly from its native HWND, bypassing
+    /// any cached element. Guarantees a fresh tree rooted at the exact window.
+    /// </summary>
+    public Window? ResolveFromHandle(string handle)
+    {
+        var hwnd = GetNativeHandle(handle);
+        if (hwnd == IntPtr.Zero || !Native.IsWindow(hwnd)) return null;
+
+        var resolved = _automation.FromHandle(hwnd)?.AsWindow();
+        if (resolved != null)
+        {
+            _windows[handle] = resolved;
+        }
+        return resolved;
+    }
+
+    /// <summary>
+    /// Get the native HWND for a session handle, reading it from a cached UIA
+    /// element only if it was not registered directly from an HWND.
+    /// </summary>
+    public IntPtr GetNativeHandle(string handle)
+    {
+        if (_windowHandles.TryGetValue(handle, out var hwnd) && hwnd != IntPtr.Zero)
+        {
+            return hwnd;
+        }
+
+        if (_windows.TryGetValue(handle, out var window))
+        {
+            try
+            {
+                if (window.Properties.NativeWindowHandle.TryGetValue(out var nativeHandle) && nativeHandle != IntPtr.Zero)
+                {
+                    _windowHandles[handle] = nativeHandle;
+                    return nativeHandle;
+                }
+            }
+            catch { /* provider may be busy */ }
+        }
+
+        return IntPtr.Zero;
+    }
+
+    /// <summary>Rich, modal-proof description of a top-level window.</summary>
+    public sealed record WindowInfo(
+        string Handle,
+        string Title,
+        string? ProcessName,
+        string ClassName,
+        int ProcessId,
+        bool IsEnabled,
+        string? OwnerHandle,
+        bool IsModalOwned);
+
+    /// <summary>
+    /// Enumerate top-level windows using Win32 EnumWindows (not UI Automation), so
+    /// this succeeds even while a modal dialog blocks the target app's UIA provider.
+    /// </summary>
+    public List<WindowInfo> ListWindows()
+    {
+        var infos = Native.EnumerateTopLevelWindows(visibleOnly: true);
+        var result = new List<WindowInfo>();
+
+        foreach (var info in infos)
+        {
+            // Keep windows that have a title, or are classic dialogs (#32770 message
+            // boxes can have an empty caption but are still interesting).
+            if (string.IsNullOrEmpty(info.Title) && info.ClassName != Native.DialogClassName)
+            {
+                continue;
+            }
+
+            var handle = RegisterWindowHandle(info.Handle);
+
+            string? processName = null;
+            try { processName = System.Diagnostics.Process.GetProcessById(info.ProcessId).ProcessName; }
+            catch { }
+
+            string? ownerHandle = null;
+            var isModalOwned = false;
+            if (info.Owner != IntPtr.Zero)
+            {
+                ownerHandle = RegisterWindowHandle(info.Owner);
+                // An enabled+visible window whose owner is disabled is a modal dialog.
+                isModalOwned = info.IsEnabled && !Native.IsWindowEnabled(info.Owner);
+            }
+
+            result.Add(new WindowInfo(
+                handle,
+                info.Title,
+                processName,
+                info.ClassName,
+                info.ProcessId,
+                info.IsEnabled,
+                ownerHandle,
+                isModalOwned));
+        }
+
         return result;
+    }
+
+    /// <summary>Result of resolving the active modal blocking a window.</summary>
+    public sealed record ModalInfo(
+        string Handle,
+        Window Window,
+        string Title,
+        string ClassName,
+        string? OwnerHandle);
+
+    /// <summary>
+    /// Resolve the modal dialog currently blocking <paramref name="ownerHandle"/>
+    /// (or the foreground window if not supplied) using Win32 only, then attach a
+    /// UIA element to it via FromHandle. Returns null when no modal is active.
+    /// </summary>
+    public ModalInfo? GetActiveModal(string? ownerHandle)
+    {
+        var ownerHwnd = IntPtr.Zero;
+        if (!string.IsNullOrEmpty(ownerHandle))
+        {
+            ownerHwnd = GetNativeHandle(ownerHandle!);
+        }
+        if (ownerHwnd == IntPtr.Zero)
+        {
+            ownerHwnd = Native.GetForegroundWindow();
+        }
+
+        var modalHwnd = Native.GetActiveModal(ownerHwnd);
+
+        // Fallback: if the owner exposes no enabled popup, the foreground window may
+        // itself be a modal dialog (owned popup or classic #32770 message box).
+        if (modalHwnd == IntPtr.Zero)
+        {
+            var foreground = Native.GetForegroundWindow();
+            if (foreground != IntPtr.Zero && foreground != ownerHwnd
+                && Native.IsWindowVisible(foreground) && Native.IsWindowEnabled(foreground))
+            {
+                var owner = Native.GetWindow(foreground, Native.GW_OWNER);
+                var className = Native.GetWindowClass(foreground);
+                if (owner != IntPtr.Zero || className == Native.DialogClassName)
+                {
+                    modalHwnd = foreground;
+                }
+            }
+        }
+
+        if (modalHwnd == IntPtr.Zero) return null;
+
+        var window = _automation.FromHandle(modalHwnd)?.AsWindow();
+        if (window == null) return null;
+
+        var handle = RegisterWindowHandle(modalHwnd);
+        _windows[handle] = window;
+
+        var realOwner = Native.GetWindow(modalHwnd, Native.GW_OWNER);
+        var resolvedOwner = realOwner != IntPtr.Zero ? RegisterWindowHandle(realOwner) : ownerHandle;
+
+        return new ModalInfo(
+            handle,
+            window,
+            Native.GetWindowTitle(modalHwnd),
+            Native.GetWindowClass(modalHwnd),
+            resolvedOwner);
     }
 
     public void FocusWindow(string handle)
@@ -171,6 +350,7 @@ public class SessionManager : IDisposable
         }
         window.Close();
         _windows.Remove(handle);
+        _windowHandles.Remove(handle);
     }
 
     public void Dispose()
@@ -181,6 +361,7 @@ public class SessionManager : IDisposable
         }
         _applications.Clear();
         _windows.Clear();
+        _windowHandles.Clear();
         _automation.Dispose();
     }
 }

@@ -1,6 +1,6 @@
 using System.Linq;
 using FlaUI.UIA3;
-using PlaywrightWindows.Mcp.Core;
+using FlaUI.Mcp.Core;
 using Xunit;
 
 namespace FlaUI.Mcp.Tests;

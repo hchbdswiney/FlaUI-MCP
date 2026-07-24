@@ -1,5 +1,5 @@
 using System.Drawing;
-using PlaywrightWindows.Mcp.Core;
+using FlaUI.Mcp.Core;
 using Xunit;
 
 namespace FlaUI.Mcp.Tests;

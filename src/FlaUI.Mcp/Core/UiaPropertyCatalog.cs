@@ -7,7 +7,7 @@ using FlaUI.Core.AutomationElements;
 using FlaUI.Core.AutomationElements.Infrastructure;
 using FlaUI.Core.Identifiers;
 
-namespace PlaywrightWindows.Mcp.Core;
+namespace FlaUI.Mcp.Core;
 
 /// <summary>
 /// Resolves friendly, camelCase property names (e.g. "helpText", "isEnabled",

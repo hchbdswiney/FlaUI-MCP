@@ -1,4 +1,4 @@
-using PlaywrightWindows.Mcp.Tools;
+using FlaUI.Mcp.Tools;
 using Xunit;
 
 namespace FlaUI.Mcp.Tests;

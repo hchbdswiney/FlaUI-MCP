@@ -1,6 +1,6 @@
 using FlaUI.Core.AutomationElements;
 
-namespace PlaywrightWindows.Mcp.Core;
+namespace FlaUI.Mcp.Core;
 
 /// <summary>
 /// Maps element refs (like "w1e5") to AutomationElements

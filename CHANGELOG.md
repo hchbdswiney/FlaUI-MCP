@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0-net48] - 2026-07-24
+
+### Added
+- `windows_get_active_modal` MCP tool that resolves the modal dialog currently blocking a
+  window (both classic `#32770` message boxes and rich WinForms/Infragistics modal forms)
+  using Win32 (`GetWindow`/`GW_ENABLEDPOPUP`, foreground fallback) instead of UI Automation
+  enumeration, then attaches to it with `AutomationElement.FromHandle`. Returns the modal's
+  handle, title, class, owner, and a shallow accessibility snapshot already scoped to the
+  modal subtree - so it never descends into a huge grid behind the disabled parent and
+  returns quickly even over a 3,000+ row grid.
+- `windows_snapshot` gained a `scope` option (`descendants` | `subtree-from-handle`). The
+  `subtree-from-handle` mode re-resolves the element directly from the window's native HWND
+  so the walk is guaranteed to stay within that window and can never leak into a sibling grid.
+- `timeoutMs` option added to `windows_snapshot`, `windows_click`, `windows_fill`,
+  `windows_type`, and `windows_focus`. Interaction tools bound each UIA call and fail fast
+  with a clear, retryable error instead of hanging until the global tool timeout.
+
+### Changed
+- `windows_list_windows` is now backed by Win32 `EnumWindows` (not UI Automation), so it
+  keeps working while a modal dialog blocks an app (no more `0x80131505` timeouts). Results
+  now include the window class, pid, enabled state, owner handle, and a `modal` flag.
+- Renamed the MCP server identity from `playwright-windows` to `flaui-mcp`, and renamed the
+  internal namespace from `PlaywrightWindows.Mcp` to `FlaUI.Mcp` to match the project name.
+  FlaUI-MCP still follows Playwright's accessibility-snapshot + element-ref interaction
+  pattern - it is inspired by Playwright but is a distinct FlaUI/UI Automation tool.
+
 ## [0.5.0-net48] - 2026-07-24
 
 ### Added

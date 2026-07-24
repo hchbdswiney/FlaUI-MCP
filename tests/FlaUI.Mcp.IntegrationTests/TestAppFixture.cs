@@ -2,9 +2,9 @@ using System.Diagnostics;
 using System.Text.Json;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
-using PlaywrightWindows.Mcp;
-using PlaywrightWindows.Mcp.Core;
-using PlaywrightWindows.Mcp.Tools;
+using FlaUI.Mcp;
+using FlaUI.Mcp.Core;
+using FlaUI.Mcp.Tools;
 
 namespace FlaUI.Mcp.IntegrationTests;
 
@@ -127,6 +127,45 @@ public class TestAppFixture : IAsyncLifetime
     }
 
     /// <summary>
+    /// Run a genuinely slow synchronous operation (e.g. a full snapshot of a large
+    /// grid) while emitting a periodic heartbeat so a long-running test does not look
+    /// hung. Heartbeats are written to the raw standard-error stream (which the xUnit
+    /// runner does not redirect/buffer, unlike <see cref="Console.Error"/>), so they
+    /// appear live in the terminal while the operation is in flight.
+    /// </summary>
+    public static async Task<T> RunWithHeartbeatAsync<T>(
+        string label, Func<T> work, TimeSpan? interval = null)
+    {
+        var beat = interval ?? TimeSpan.FromSeconds(1.5);
+        var sw = Stopwatch.StartNew();
+
+        WriteHeartbeat($"[heartbeat] {label}: starting...");
+
+        var task = Task.Run(work);
+        while (!task.IsCompleted)
+        {
+            var done = await Task.WhenAny(task, Task.Delay(beat));
+            if (done == task) break;
+            WriteHeartbeat($"[heartbeat] {label}: still working, {sw.Elapsed.TotalSeconds:F1}s elapsed...");
+        }
+
+        WriteHeartbeat($"[heartbeat] {label}: done in {sw.Elapsed.TotalSeconds:F1}s.");
+        return await task;
+    }
+
+    private static void WriteHeartbeat(string message)
+    {
+        try
+        {
+            var bytes = System.Text.Encoding.UTF8.GetBytes(message + Environment.NewLine);
+            var stderr = Console.OpenStandardError();
+            stderr.Write(bytes, 0, bytes.Length);
+            stderr.Flush();
+        }
+        catch { /* feedback only - never fail a test over logging */ }
+    }
+
+    /// <summary>
     /// Take a snapshot of a window and return the text.
     /// </summary>
     public string TakeSnapshot(string handle)
@@ -145,6 +184,22 @@ public class TestAppFixture : IAsyncLifetime
         var window = Session.GetWindow(handle)!;
         return builder.BuildSnapshot(handle, window, options);
     }
+
+    /// <summary>
+    /// Bounded snapshot options used by the tab-navigation and single-element
+    /// lookup helpers. Capping breadth and total elements stops these helpers from
+    /// walking large grids (e.g. the 1000-row Stress grid) just to find a tab
+    /// header, button, or first row - every named target they look for is shallow.
+    /// This keeps the large-grid integration tests fast without changing what the
+    /// product's full snapshot does (tests that need a full walk call TakeSnapshot
+    /// without options directly).
+    /// </summary>
+    private static readonly SnapshotOptions NavigationSnapshotOptions = new()
+    {
+        MaxDepth = 12,
+        MaxChildrenPerNode = 25,
+        MaxElements = 500
+    };
 
     /// <summary>
     /// Click a tab by name and wait for its content to appear (polls for a marker).
@@ -169,19 +224,22 @@ public class TestAppFixture : IAsyncLifetime
         while (sw.ElapsedMilliseconds < 5000)
         {
             await Task.Delay(100);
-            if (TakeSnapshot(handle).Contains(contentMarker))
+            // Bounded snapshot: the marker (tab content / first grid row) is shallow,
+            // so we must not walk the entire large grid on every poll iteration.
+            if (TakeSnapshot(handle, NavigationSnapshotOptions).Contains(contentMarker))
                 return;
         }
     }
 
     /// <summary>
     /// Find an element ref by name in the snapshot of the given window.
-    /// Takes a fresh snapshot each time — use the overload accepting a
-    /// pre-built snapshot when multiple lookups are needed.
+    /// Uses a bounded snapshot (named controls are shallow) so this stays fast
+    /// even on tabs hosting large grids. Takes a fresh snapshot each time — use the
+    /// overload accepting a pre-built snapshot when multiple lookups are needed.
     /// </summary>
     public string? FindRefByName(string handle, string name)
     {
-        var snapshot = TakeSnapshot(handle);
+        var snapshot = TakeSnapshot(handle, NavigationSnapshotOptions);
         return FindRefInSnapshot(snapshot, name);
     }
 

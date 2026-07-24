@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace PlaywrightWindows.Mcp;
+namespace FlaUI.Mcp;
 
 /// <summary>
 /// Registry for MCP tools - maps tool names to handlers
@@ -198,5 +198,33 @@ public abstract class ToolBase : ITool
         }
 
         return values.ToArray();
+    }
+
+    /// <summary>
+    /// Run a synchronous UI Automation operation with a hard wall-clock bound so a
+    /// stalled cross-process call fails fast (with a clear, retryable error) instead
+    /// of hanging until the outer tool timeout. When <paramref name="timeoutMs"/> is
+    /// null or non-positive the work runs without an extra bound.
+    /// </summary>
+    protected static async Task<McpToolResult> RunBoundedAsync(int? timeoutMs, string toolName, Func<McpToolResult> work)
+    {
+        if (timeoutMs is null or <= 0)
+        {
+            return await Task.Run(work).ConfigureAwait(false);
+        }
+
+        var workTask = Task.Run(work);
+        if (await Task.WhenAny(workTask, Task.Delay(timeoutMs.Value)).ConfigureAwait(false) == workTask)
+        {
+            return await workTask.ConfigureAwait(false);
+        }
+
+        // Observe any later fault so it does not surface as an unobserved exception.
+        _ = workTask.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+
+        return ErrorResult(
+            $"{toolName} timed out after {timeoutMs.Value}ms. The target may be blocked by a modal " +
+            "dialog or a busy UI Automation provider. Resolve the modal with windows_get_active_modal " +
+            "and interact with its scoped refs, or narrow the snapshot scope, then retry.");
     }
 }

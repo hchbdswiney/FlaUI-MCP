@@ -444,6 +444,21 @@ namespace WinFormsTestApp
             };
             layout.Controls.Add(modalButton);
 
+            // Button that opens a classic Win32 message box (#32770 dialog class).
+            // Validates modal resolution and pattern interaction for OS-owned dialogs.
+            var messageBoxButton = new Button
+            {
+                Text = "Open Message Box",
+                Name = "OpenMessageBoxButton",
+                AutoSize = true
+            };
+            messageBoxButton.Click += (s, e) =>
+            {
+                MessageBox.Show(this, "Continue with the operation?", "Confirm",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            };
+            layout.Controls.Add(messageBoxButton);
+
             // Button that opens a modeless dialog
             var modelessButton = new Button
             {
@@ -532,6 +547,57 @@ namespace WinFormsTestApp
                 grid.Rows.Add($"STRESS-{i + 1:D4}", $"Stress Row {i + 1}", $"{rng.Next(1, 100000)}");
             }
             split.Panel1.Controls.Add(grid);
+
+            // A button that opens a small modal *over* the large grid. Used to verify
+            // that windows_get_active_modal scopes to the modal's own HWND and never
+            // descends into the huge grid behind the (now disabled) parent form.
+            var openModalOverGridButton = new Button
+            {
+                Text = "Open Modal Over Grid",
+                Name = "OpenModalOverGridButton",
+                Dock = DockStyle.Top,
+                Height = 30
+            };
+            openModalOverGridButton.Click += (s, e) =>
+            {
+                using var dialog = new Form
+                {
+                    Text = "Grid Blocking Modal",
+                    Name = "GridBlockingModal",
+                    Size = new Size(320, 180),
+                    StartPosition = FormStartPosition.CenterParent,
+                    FormBorderStyle = FormBorderStyle.FixedDialog,
+                    MaximizeBox = false,
+                    MinimizeBox = false
+                };
+                var okButton = new Button
+                {
+                    Text = "Accept",
+                    Name = "ModalAcceptButton",
+                    DialogResult = DialogResult.OK,
+                    Location = new Point(60, 100)
+                };
+                var cancelButton = new Button
+                {
+                    Text = "Cancel",
+                    Name = "ModalCancelButton",
+                    DialogResult = DialogResult.Cancel,
+                    Location = new Point(160, 100)
+                };
+                dialog.Controls.Add(okButton);
+                dialog.Controls.Add(cancelButton);
+                dialog.Controls.Add(new Label
+                {
+                    Text = "Modal opened over a large grid.",
+                    Name = "GridModalLabel",
+                    Location = new Point(20, 30),
+                    AutoSize = true
+                });
+                dialog.AcceptButton = okButton;
+                dialog.CancelButton = cancelButton;
+                dialog.ShowDialog(this);
+            };
+            split.Panel1.Controls.Add(openModalOverGridButton);
 
             // Right: a deeply nested panel chain to stress depth limiting.
             // The innermost panel holds a marker label only reachable at deep depth.

@@ -1,8 +1,8 @@
 using System.Text.Json;
 using FlaUI.Core.AutomationElements;
-using PlaywrightWindows.Mcp.Core;
+using FlaUI.Mcp.Core;
 
-namespace PlaywrightWindows.Mcp.Tools;
+namespace FlaUI.Mcp.Tools;
 
 /// <summary>
 /// Take accessibility snapshot of a window - THE KEY TOOL FOR AGENTS
@@ -61,39 +61,59 @@ public class SnapshotTool : ToolBase
                 description = "Optional list of friendly UIA property names to emit inline on each element as [name=value]. " +
                     "Examples: helpText, className, isKeyboardFocusable, boundingRectangle, itemStatus, automationId, frameworkId. " +
                     "Unknown names are ignored with a note. Use windows_get_properties on a single element to discover all available properties."
+            },
+            scope = new
+            {
+                type = "string",
+                @enum = new[] { "descendants", "subtree-from-handle" },
+                description = "How to root the snapshot. 'descendants' (default) walks the cached window element. " +
+                    "'subtree-from-handle' re-resolves the element directly from the window's native HWND via " +
+                    "AutomationElement.FromHandle, guaranteeing the walk is scoped to exactly that window and can " +
+                    "never leak into a sibling grid behind a disabled parent. Use this for modal dialogs."
+            },
+            timeoutMs = new
+            {
+                type = "integer",
+                description = "Wall-clock budget in milliseconds. The walk stops and emits a truncation marker when " +
+                    "exceeded, and a hard bound fails fast if the provider stalls. Default: unbounded (relies on the " +
+                    "global tool timeout). Recommended for large grids / deep modal trees."
             }
         }
     };
 
-    public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
+    public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
         var handle = GetStringArgument(arguments, "handle");
+        var scope = GetStringArgument(arguments, "scope");
+        var timeoutMs = GetIntArgument(arguments, "timeoutMs");
         var options = new SnapshotOptions
         {
             MaxDepth = GetIntArgument(arguments, "maxDepth", 10),
             MaxChildrenPerNode = GetIntArgument(arguments, "maxChildren"),
             MaxElements = GetIntArgument(arguments, "maxElements"),
-            Properties = GetStringArrayArgument(arguments, "properties")
+            Properties = GetStringArrayArgument(arguments, "properties"),
+            TimeBudget = timeoutMs.HasValue ? TimeSpan.FromMilliseconds(timeoutMs.Value) : null
         };
 
-        try
+        return await RunBoundedAsync(timeoutMs, Name, () =>
         {
             FlaUI.Core.AutomationElements.Window? window = null;
 
             if (!string.IsNullOrEmpty(handle))
             {
-                window = _sessionManager.GetWindow(handle);
+                window = string.Equals(scope, "subtree-from-handle", StringComparison.OrdinalIgnoreCase)
+                    ? _sessionManager.ResolveFromHandle(handle!) ?? _sessionManager.GetWindow(handle!)
+                    : _sessionManager.GetWindow(handle!);
                 if (window == null)
                 {
-                    return Task.FromResult(ErrorResult($"Window not found: {handle}"));
+                    return ErrorResult($"Window not found: {handle}");
                 }
             }
             else
             {
                 // Get the foreground window
-                var desktop = _sessionManager.Automation.GetDesktop();
                 var focusedElement = _sessionManager.Automation.FocusedElement();
-                
+
                 if (focusedElement != null)
                 {
                     // Walk up to find the window
@@ -111,7 +131,7 @@ public class SnapshotTool : ToolBase
 
                 if (window == null)
                 {
-                    return Task.FromResult(ErrorResult("No window specified and no focused window found. Use windows_list_windows to see available windows."));
+                    return ErrorResult("No window specified and no focused window found. Use windows_list_windows to see available windows.");
                 }
 
                 // Register this window
@@ -119,11 +139,7 @@ public class SnapshotTool : ToolBase
             }
 
             var snapshot = _snapshotBuilder.BuildSnapshot(handle!, window, options);
-            return Task.FromResult(TextResult(snapshot));
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(ErrorResult($"Failed to capture snapshot: {ex.Message}"));
-        }
+            return TextResult(snapshot);
+        });
     }
 }

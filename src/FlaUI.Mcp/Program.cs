@@ -1,6 +1,6 @@
-using PlaywrightWindows.Mcp;
-using PlaywrightWindows.Mcp.Core;
-using PlaywrightWindows.Mcp.Tools;
+using FlaUI.Mcp;
+using FlaUI.Mcp.Core;
+using FlaUI.Mcp.Tools;
 
 DpiUtility.EnablePerMonitorV2();
 
@@ -20,6 +20,7 @@ toolRegistry.RegisterTool(new GetPropertiesTool(elementRegistry));
 toolRegistry.RegisterTool(new SendKeysTool(elementRegistry));
 toolRegistry.RegisterTool(new ScreenshotTool(sessionManager, elementRegistry));
 toolRegistry.RegisterTool(new ListWindowsTool(sessionManager));
+toolRegistry.RegisterTool(new GetActiveModalTool(sessionManager, elementRegistry));
 toolRegistry.RegisterTool(new FocusWindowTool(sessionManager));
 toolRegistry.RegisterTool(new CloseWindowTool(sessionManager));
 toolRegistry.RegisterTool(new BatchTool(sessionManager, elementRegistry));

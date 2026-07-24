@@ -1,9 +1,9 @@
 using System.Text.Json;
 using FlaUI.Core.Input;
 using FlaUI.Core.WindowsAPI;
-using PlaywrightWindows.Mcp.Core;
+using FlaUI.Mcp.Core;
 
-namespace PlaywrightWindows.Mcp.Tools;
+namespace FlaUI.Mcp.Tools;
 
 /// <summary>
 /// Send key presses and key chords to an element or the currently focused control.

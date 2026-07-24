@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace PlaywrightWindows.Mcp;
+namespace FlaUI.Mcp;
 
 /// <summary>
 /// MCP Server that handles JSON-RPC over stdio
@@ -97,8 +97,8 @@ public class McpServer
             },
             ServerInfo = new McpServerInfo
             {
-                Name = "playwright-windows",
-                Version = "0.4.0"
+                Name = "flaui-mcp",
+                Version = "0.6.0"
             }
         };
     }

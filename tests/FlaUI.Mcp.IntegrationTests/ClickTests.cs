@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using PlaywrightWindows.Mcp.Tools;
+using FlaUI.Mcp.Tools;
 using Xunit.Abstractions;
 
 namespace FlaUI.Mcp.IntegrationTests;

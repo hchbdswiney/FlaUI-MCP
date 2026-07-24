@@ -6,7 +6,7 @@ using System.Threading;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Capturing;
 using FlaUI.UIA3;
-using PlaywrightWindows.Mcp.Core;
+using FlaUI.Mcp.Core;
 using Xunit;
 
 namespace FlaUI.Mcp.Tests;

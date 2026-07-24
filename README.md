@@ -74,7 +74,7 @@ Add to your MCP configuration (e.g., `~/.copilot/mcp-config.json`):
 ```json
 {
   "mcpServers": {
-    "windows": {
+    "flaui-mcp": {
       "type": "local",
       "command": "C:\\path\\to\\FlaUI-MCP.exe",
       "tools": ["*"]
@@ -88,7 +88,7 @@ Or using `dotnet run`:
 ```json
 {
   "mcpServers": {
-    "windows": {
+    "flaui-mcp": {
       "type": "local",
       "command": "dotnet",
       "args": ["run", "--project", "C:\\path\\to\\src\\FlaUI.Mcp"]

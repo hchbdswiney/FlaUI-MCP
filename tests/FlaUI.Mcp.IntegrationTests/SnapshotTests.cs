@@ -1,6 +1,6 @@
 using FlaUI.Core.AutomationElements;
-using PlaywrightWindows.Mcp.Core;
-using PlaywrightWindows.Mcp.Tools;
+using FlaUI.Mcp.Core;
+using FlaUI.Mcp.Tools;
 using System.Diagnostics;
 using Xunit.Abstractions;
 
@@ -209,8 +209,13 @@ public class SnapshotTests
             new SnapshotOptions { MaxDepth = 3, MaxChildrenPerNode = 20, MaxElements = 200 });
         shallowSw.Stop();
 
+        // This comparison deliberately walks the entire 1000-row grid (no caps) to
+        // prove a full snapshot is materially slower than a bounded one. That full
+        // walk is inherently slow, so emit a heartbeat while it runs to show progress.
         var fullSw = Stopwatch.StartNew();
-        var full = _fixture.TakeSnapshot(_fixture.WinFormsHandle);
+        var full = await TestAppFixture.RunWithHeartbeatAsync(
+            "full Stress-tab snapshot",
+            () => _fixture.TakeSnapshot(_fixture.WinFormsHandle));
         fullSw.Stop();
 
         _output.WriteLine($"Shallow: {shallowSw.ElapsedMilliseconds}ms, Full: {fullSw.ElapsedMilliseconds}ms");

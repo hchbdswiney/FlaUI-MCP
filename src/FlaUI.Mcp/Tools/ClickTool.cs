@@ -1,9 +1,9 @@
 using System.Text.Json;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Input;
-using PlaywrightWindows.Mcp.Core;
+using FlaUI.Mcp.Core;
 
-namespace PlaywrightWindows.Mcp.Tools;
+namespace FlaUI.Mcp.Tools;
 
 /// <summary>
 /// Click an element by ref
@@ -43,78 +43,88 @@ public class ClickTool : ToolBase
             {
                 type = "boolean",
                 description = "Whether to double-click (default: false)"
+            },
+            timeoutMs = new
+            {
+                type = "integer",
+                description = "Wall-clock budget in milliseconds before failing fast with a retryable error " +
+                    "(default 10000). Prevents hanging on a stalled provider."
             }
         },
         required = new[] { "ref" }
     };
 
-    public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
+    public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
         var refId = GetStringArgument(arguments, "ref");
         if (string.IsNullOrEmpty(refId))
         {
-            return Task.FromResult(ErrorResult("Missing required argument: ref"));
+            return ErrorResult("Missing required argument: ref");
         }
 
         var button = GetStringArgument(arguments, "button") ?? "left";
         var doubleClick = GetBoolArgument(arguments, "doubleClick", false);
+        var timeoutMs = GetIntArgument(arguments, "timeoutMs", 10000);
 
         var element = _elementRegistry.GetElement(refId);
         if (element == null)
         {
-            return Task.FromResult(ErrorResult($"Element not found: {refId}. Run windows_snapshot to refresh element refs."));
+            return ErrorResult($"Element not found: {refId}. Run windows_snapshot to refresh element refs.");
         }
 
-        try
+        return await RunBoundedAsync(timeoutMs, Name, () =>
         {
-            var elementName = element.Properties.Name.ValueOrDefault ?? refId;
+            try
+            {
+                var elementName = element.Properties.Name.ValueOrDefault ?? refId;
 
-            // Try Invoke pattern first (most reliable for buttons)
-            if (button == "left" && !doubleClick && element.Patterns.Invoke.IsSupported)
-            {
-                element.Patterns.Invoke.Pattern.Invoke();
-                return Task.FromResult(TextResult($"Invoked {elementName}"));
-            }
+                // Try Invoke pattern first (most reliable for buttons)
+                if (button == "left" && !doubleClick && element.Patterns.Invoke.IsSupported)
+                {
+                    element.Patterns.Invoke.Pattern.Invoke();
+                    return TextResult($"Invoked {elementName}");
+                }
 
-            // Try Toggle pattern for checkboxes
-            if (button == "left" && !doubleClick && element.Patterns.Toggle.IsSupported)
-            {
-                element.Patterns.Toggle.Pattern.Toggle();
-                var newState = element.Patterns.Toggle.Pattern.ToggleState.ValueOrDefault;
-                return Task.FromResult(TextResult($"Toggled {elementName} to {newState}"));
-            }
+                // Try Toggle pattern for checkboxes
+                if (button == "left" && !doubleClick && element.Patterns.Toggle.IsSupported)
+                {
+                    element.Patterns.Toggle.Pattern.Toggle();
+                    var newState = element.Patterns.Toggle.Pattern.ToggleState.ValueOrDefault;
+                    return TextResult($"Toggled {elementName} to {newState}");
+                }
 
-            // Try SelectionItem pattern for list items
-            if (button == "left" && !doubleClick && element.Patterns.SelectionItem.IsSupported)
-            {
-                element.Patterns.SelectionItem.Pattern.Select();
-                return Task.FromResult(TextResult($"Selected {elementName}"));
-            }
+                // Try SelectionItem pattern for list items
+                if (button == "left" && !doubleClick && element.Patterns.SelectionItem.IsSupported)
+                {
+                    element.Patterns.SelectionItem.Pattern.Select();
+                    return TextResult($"Selected {elementName}");
+                }
 
-            // Fall back to mouse click
-            var clickPoint = element.GetClickablePoint();
-            
-            var mouseButton = button switch
-            {
-                "right" => MouseButton.Right,
-                "middle" => MouseButton.Middle,
-                _ => MouseButton.Left
-            };
+                // Fall back to mouse click
+                var clickPoint = element.GetClickablePoint();
 
-            if (doubleClick)
-            {
-                Mouse.DoubleClick(clickPoint, mouseButton);
-                return Task.FromResult(TextResult($"Double-clicked {elementName}"));
+                var mouseButton = button switch
+                {
+                    "right" => MouseButton.Right,
+                    "middle" => MouseButton.Middle,
+                    _ => MouseButton.Left
+                };
+
+                if (doubleClick)
+                {
+                    Mouse.DoubleClick(clickPoint, mouseButton);
+                    return TextResult($"Double-clicked {elementName}");
+                }
+                else
+                {
+                    Mouse.Click(clickPoint, mouseButton);
+                    return TextResult($"Clicked {elementName}");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                Mouse.Click(clickPoint, mouseButton);
-                return Task.FromResult(TextResult($"Clicked {elementName}"));
+                return ErrorResult($"Failed to click {refId}: {ex.Message}");
             }
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(ErrorResult($"Failed to click {refId}: {ex.Message}"));
-        }
+        });
     }
 }

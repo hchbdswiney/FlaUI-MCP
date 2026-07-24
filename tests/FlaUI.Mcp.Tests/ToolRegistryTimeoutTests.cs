@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
-using PlaywrightWindows.Mcp;
+using FlaUI.Mcp;
 using Xunit;
 
 namespace FlaUI.Mcp.Tests;

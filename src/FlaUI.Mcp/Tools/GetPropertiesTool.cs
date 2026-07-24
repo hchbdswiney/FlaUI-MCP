@@ -1,8 +1,8 @@
 using System.Text;
 using System.Text.Json;
-using PlaywrightWindows.Mcp.Core;
+using FlaUI.Mcp.Core;
 
-namespace PlaywrightWindows.Mcp.Tools;
+namespace FlaUI.Mcp.Tools;
 
 /// <summary>
 /// Inspect UI Automation properties of a single element by ref.
